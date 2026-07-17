@@ -1,0 +1,18 @@
+# Custom node repositories
+https://github.com/Comfy-Org/ComfyUI-Manager.git|$CUSTOM_NODES/ComfyUI-Manager|ComfyUI Manager
+https://github.com/Fannovel16/comfyui_controlnet_aux.git|$CUSTOM_NODES/comfyui_controlnet_aux|ControlNet Aux Preprocessors
+https://github.com/cubiq/ComfyUI_IPAdapter_plus.git|$CUSTOM_NODES/ComfyUI_IPAdapter_plus|IP-Adapter Plus
+https://github.com/WASasquatch/was-node-suite-comfyui.git|$CUSTOM_NODES/WAS-Node-Suite|WAS Node Suite
+https://github.com/kijai/ComfyUI-KJNodes.git|$CUSTOM_NODES/ComfyUI-KJNodes|KJNodes
+https://github.com/rgthree/rgthree-comfy.git|$CUSTOM_NODES/rgthree-comfy|rgthree
+https://github.com/Acly/comfyui-inpaint-nodes.git|$CUSTOM_NODES/comfyui-inpaint-nodes|Inpaint Nodes
+https://github.com/yolain/ComfyUI-Easy-Use.git|$CUSTOM_NODES/ComfyUI-Easy-Use|Easy Use
+https://github.com/chflame163/ComfyUI_LayerStyle.git|$CUSTOM_NODES/ComfyUI_LayerStyle|LayerStyle
+https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved.git|$CUSTOM_NODES/ComfyUI-AnimateDiff-Evolved|AnimateDiff Evolved
+https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git|$CUSTOM_NODES/ComfyUI-VideoHelperSuite|Video Helper Suite
+https://github.com/if-ai/ComfyUI-IF_AI_tools.git|$CUSTOM_NODES/ComfyUI-IF_AI_tools|IF AI Tools
+https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git|$CUSTOM_NODES/ComfyUI-Custom-Scripts|Custom Scripts
+https://github.com/Nuked88/ComfyUI-N-Sidebar.git|$CUSTOM_NODES/ComfyUI-N-Sidebar|N-Sidebar
+https://github.com/daveinme/ComfyUI-Cloud-Manager.git|$CUSTOM_NODES/ComfyUI-Cloud-Manager|Cloud Manager
+https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git|$CUSTOM_NODES/ComfyUI_UltimateSDUpscale|Ultimate SD Upscale
+https://github.com/PozzettiAndrea/ComfyUI-TRELLIS2.git|$CUSTOM_NODES/ComfyUI-TRELLIS2|TRELLIS2
