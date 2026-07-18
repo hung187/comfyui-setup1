@@ -90,13 +90,21 @@ init_runtime_env() {
     fi
 
     PYTHON_CMD="python3"
-    PYTHON_VERSION=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    local python_version
+    python_version=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
     $PYTHON_CMD -c "import sys; exit(0 if sys.version_info >= (3,10) else 1)" >/dev/null 2>&1
     if [ $? -ne 0 ]; then
-        echo -e "${YELLOW}⚠️  Python $PYTHON_VERSION < 3.10, một số node có thể không tương thích.${NC}"
+        echo -e "${YELLOW}⚠️  Python $python_version < 3.10, một số node có thể không tương thích.${NC}"
     fi
 
     mkdir -p "$COMFY_BASE" "$MODELS" "$CUSTOM_NODES"
+    if [ -z "$LOG_FILE" ]; then
+        LOG_FILE="$COMFY_BASE/setup_log_$(date +%Y%m%d_%H%M%S).txt"
+        > "$LOG_FILE"
+    fi
+    if [ -z "$MANIFEST_FILE" ]; then
+        MANIFEST_FILE="$COMFY_BASE/manifest.json"
+    fi
     return 0
 }
 
@@ -134,7 +142,7 @@ check_disk_space() {
         read -r CONTINUE_LOW_SPACE
         if [[ ! "$CONTINUE_LOW_SPACE" =~ ^[Yy]$ ]]; then
             echo -e "${RED}Đã hủy. Hãy giải phóng thêm dung lượng rồi chạy lại.${NC}"
-            exit 1
+            return 1
         fi
     else
         echo -e "${GREEN}✅ Dung lượng trống: ${avail_space_gb}GB${NC}"

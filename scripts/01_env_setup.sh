@@ -49,6 +49,7 @@ run_stage_01() {
 
     echo -e "${GREEN}✅ Python packages sẵn sàng.${NC}"
     check_disk_space
+    return 0
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

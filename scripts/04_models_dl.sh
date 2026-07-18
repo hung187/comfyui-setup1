@@ -9,9 +9,6 @@ run_stage_04() {
 
     mkdir -p "$MODELS"/checkpoints/{IL,PONY} "$MODELS"/controlnet "$MODELS"/loras/{Quality,Face,Hair,Eyes,Hands,Clothes,Character,Style,Effect,Pose,HENTAI,TU_THE_VIDEO} "$MODELS"/vae "$MODELS"/clip_vision "$MODELS"/ipadapter "$MODELS"/upscale_models "$MODELS"/insightface "$MODELS"/facerestore "$MODELS"/facexlib "$MODELS"/diffusion_models
 
-    LOG_FILE="$COMFY_BASE/setup_log_$(date +%Y%m%d_%H%M%S).txt"
-    MANIFEST_FILE="$COMFY_BASE/manifest.json"
-    > "$LOG_FILE"
 
     local config_file="$SCRIPT_DIR/config/models_list.csv"
     if [ ! -f "$config_file" ]; then
@@ -40,6 +37,7 @@ run_stage_04() {
     done
 
     export TOTAL CURRENT LOG_FILE MANIFEST_FILE
+    return 0
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

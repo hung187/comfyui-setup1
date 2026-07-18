@@ -55,16 +55,18 @@ PY
     echo -e "${MAGENTA}════════════════════════════════════════════════════════════════${NC}"
 
     if [ "${DRY_RUN:-0}" = "1" ]; then
-        dry_url_ok=$(grep -c "| DRY_OK |" "$LOG_FILE" 2>/dev/null || echo 0)
-        dry_url_fail=$(grep -c "| DRY_FAIL |" "$LOG_FILE" 2>/dev/null || echo 0)
-        dry_clone_ok=$(grep -c "| DRY_CLONE_OK |" "$LOG_FILE" 2>/dev/null || echo 0)
-        dry_clone_fail=$(grep -c "| DRY_CLONE_FAIL |" "$LOG_FILE" 2>/dev/null || echo 0)
-        dry_pip_ok=$(grep -c "| DRY_PIP_OK |" "$LOG_FILE" 2>/dev/null || echo 0)
-        dry_pip_warn=$(grep -c "| DRY_PIP_WARN |" "$LOG_FILE" 2>/dev/null || echo 0)
+        dry_url_ok=$(grep -c "| DRY_OK |" "$LOG_FILE" 2>/dev/null) || dry_url_ok=0
+        dry_url_fail=$(grep -c "| DRY_FAIL |" "$LOG_FILE" 2>/dev/null) || dry_url_fail=0
+        dry_clone_ok=$(grep -c "| DRY_CLONE_OK |" "$LOG_FILE" 2>/dev/null) || dry_clone_ok=0
+        dry_clone_fail=$(grep -c "| DRY_CLONE_FAIL |" "$LOG_FILE" 2>/dev/null) || dry_clone_fail=0
+        dry_pip_ok=$(grep -c "| DRY_PIP_OK |" "$LOG_FILE" 2>/dev/null) || dry_pip_ok=0
+        dry_pip_warn=$(grep -c "| DRY_PIP_WARN |" "$LOG_FILE" 2>/dev/null) || dry_pip_warn=0
 
         echo -e "${CYAN}🧪 KẾT QUẢ DRY_RUN (không có file/model nào được tải thật)${NC}\n"
         echo -e "${BLUE}🔗 URL Model:${NC}   ${GREEN}$dry_url_ok OK${NC} / ${RED}$dry_url_fail LỖI${NC} / tổng $TOTAL"
-        echo -e "${BLUE}📦 Custom Node:${NC} ${GREEN}$dry_clone_ok OK${NC} / ${RED}$dry_clone_fail LỖI${NC} / tổng ${#REPO_LIST[@]}"
+        local total_nodes
+        total_nodes=$(grep -cvE '^\s*(#|$)' "$SCRIPT_DIR/config/nodes_list.txt" 2>/dev/null) || total_nodes=0
+        echo -e "${BLUE}📦 Custom Node:${NC} ${GREEN}$dry_clone_ok OK${NC} / ${RED}$dry_clone_fail LỖI${NC} / tổng $total_nodes"
         echo -e "${BLUE}🐍 Pip requirements:${NC} ${GREEN}$dry_pip_ok OK${NC} / ${YELLOW}$dry_pip_warn CẢNH BÁO${NC}"
 
         if [ "$dry_url_fail" -gt 0 ] || [ "$dry_clone_fail" -gt 0 ]; then
@@ -89,8 +91,8 @@ PY
     count_diff=$(find "$MODELS/diffusion_models" -type f 2>/dev/null | wc -l)
 
     total_size=$(du -sh "$MODELS" 2>/dev/null | cut -f1)
-    ok_count=$(grep -c "| OK |" "$LOG_FILE" 2>/dev/null || echo 0)
-    skip_count=$(grep -c "| SKIP |" "$LOG_FILE" 2>/dev/null || echo 0)
+    ok_count=$(grep -c "| OK |" "$LOG_FILE" 2>/dev/null) || ok_count=0
+    skip_count=$(grep -c "| SKIP |" "$LOG_FILE" 2>/dev/null) || skip_count=0
 
     echo -e "${BLUE}📁 Checkpoints:${NC} $count_ckpt"
     echo -e "${BLUE}🎮 ControlNet:${NC} $count_ctrl"
@@ -104,7 +106,7 @@ PY
     echo -e "${GREEN}💾 Tổng dung lượng:${NC} $total_size"
     echo -e "${GREEN}📥 Tải mới thành công:${NC} $ok_count  ${CYAN}⏩ Bỏ qua (đã có sẵn):${NC} $skip_count  ${BLUE}(tổng $TOTAL model)${NC}"
 
-    fail_count=$(grep -c "FAIL" "$LOG_FILE" 2>/dev/null || echo 0)
+    fail_count=$(grep -c "FAIL" "$LOG_FILE" 2>/dev/null) || fail_count=0
     if [ "$fail_count" -gt 0 ]; then
         echo -e "${RED}⚠️  Có $fail_count lần tải thất bại. Xem log: $LOG_FILE${NC}"
     else

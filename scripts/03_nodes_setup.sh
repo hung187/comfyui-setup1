@@ -33,6 +33,7 @@ run_stage_03() {
     for dir in "$CUSTOM_NODES"/*/; do
         [ -d "$dir" ] && install_requirements "$dir"
     done
+    return 0
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

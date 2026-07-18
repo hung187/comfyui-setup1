@@ -11,11 +11,11 @@ source "$SCRIPT_DIR/scripts/04_models_dl.sh"
 source "$SCRIPT_DIR/scripts/05_manifest.sh"
 
 main() {
-    run_stage_01 "$@"
-    run_stage_02 "$@"
-    run_stage_03 "$@"
-    run_stage_04 "$@"
-    run_stage_05 "$@"
+    run_stage_01 "$@" || return 1
+    run_stage_02 "$@" || return 1
+    run_stage_03 "$@" || return 1
+    run_stage_04 "$@" || return 1
+    run_stage_05 "$@" || return 1
 }
 
 main "$@"

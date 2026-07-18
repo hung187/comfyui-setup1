@@ -20,7 +20,7 @@ run_stage_02() {
         read -r CONTINUE_NO_TOKEN
         if [[ ! "$CONTINUE_NO_TOKEN" =~ ^[Yy]$ ]]; then
             echo -e "${RED}Đã hủy. Chạy lại script và nhập token để tiếp tục.${NC}"
-            exit 1
+            return 1
         fi
     else
         CIVITAI_TOKEN="${CIVITAI_TOKEN#\?}"
@@ -55,7 +55,7 @@ run_stage_02() {
             read -r CONTINUE_BAD_TOKEN
             if [[ ! "$CONTINUE_BAD_TOKEN" =~ ^[Yy]$ ]]; then
                 echo -e "${RED}Đã hủy. Chạy lại script và nhập đúng token.${NC}"
-                exit 1
+                return 1
             fi
         elif [[ "$TEST_CODE" == "000" ]]; then
             echo -e "${YELLOW}⚠️  Không kết nối được để kiểm tra token (có thể do lỗi SSL/mạng).${NC}"
