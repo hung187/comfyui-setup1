@@ -4,73 +4,47 @@ run_stage_02() {
     init_runtime_env || return 1
 
     echo -e "${MAGENTA}════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}🔑 CẤU HÌNH CIVITAI TOKEN${NC}"
+    echo -e "${CYAN}🔑 Stage 02: Cấu hình Token & ComfyUI Core${NC}"
     echo -e "${MAGENTA}════════════════════════════════════════════════════════════════${NC}"
 
-    if [ -z "$CIVITAI_TOKEN" ]; then
-        echo -e "${YELLOW}Nhập Civitai API Token của bạn (ký tự sẽ được ẩn):${NC}"
-        echo -e "${YELLOW}Lưu ý: chỉ dán RIÊNG chuỗi token, KHÔNG kèm chữ 'token=' phía trước.${NC}"
-        read -r -s CIVITAI_TOKEN
-        echo ""
+    if [ -z "${CIVITAI_TOKEN:-}" ]; then
+        if [ -t 0 ] && [ "${DRY_RUN:-0}" != "1" ]; then
+            echo -e "${YELLOW}Nhập Civitai API Token của bạn (bấm Enter để bỏ qua):${NC}"
+            read -r -s CIVITAI_TOKEN
+            echo ""
+        else
+            echo -e "${YELLOW}ℹ️ Không tìm thấy CIVITAI_TOKEN trong môi trường. Tiếp tục không dùng token...${NC}"
+        fi
     fi
 
-    if [ -z "$CIVITAI_TOKEN" ]; then
-        echo -e "${RED}❌ Không có token nào được nhập. Một số model trên Civitai sẽ tải thất bại.${NC}"
-        echo -e "${YELLOW}   Bạn có muốn tiếp tục mà không có token? (y/N)${NC}"
-        read -r CONTINUE_NO_TOKEN
-        if [[ ! "$CONTINUE_NO_TOKEN" =~ ^[Yy]$ ]]; then
-            echo -e "${RED}Đã hủy. Chạy lại script và nhập token để tiếp tục.${NC}"
-            return 1
-        fi
-    else
+    if [ -n "${CIVITAI_TOKEN:-}" ]; then
         CIVITAI_TOKEN="${CIVITAI_TOKEN#\?}"
         CIVITAI_TOKEN="${CIVITAI_TOKEN#token=}"
         CIVITAI_TOKEN="$(echo -n "$CIVITAI_TOKEN" | tr -d '[:space:]')"
-        echo -e "${GREEN}✅ Đã nhận token (${CIVITAI_TOKEN:0:4}...${CIVITAI_TOKEN: -4}).${NC}"
-    fi
-
-    if [ -n "$CIVITAI_TOKEN" ]; then
+        
         if command -v jq &>/dev/null; then
             ENCODED_TOKEN=$(printf '%s' "$CIVITAI_TOKEN" | jq -sRr @uri)
         else
             ENCODED_TOKEN=$(printf '%s' "$CIVITAI_TOKEN" | sed 's/ /%20/g; s/#/%23/g; s/&/%26/g; s/+/%2B/g')
         fi
+        echo -e "${GREEN}✅ Đã nhận Civitai Token (${CIVITAI_TOKEN:0:4}...${CIVITAI_TOKEN: -4}).${NC}"
     else
         ENCODED_TOKEN=""
     fi
 
     export CIVITAI_TOKEN ENCODED_TOKEN
 
-    echo -e "${GREEN}▶️  Bắt đầu quá trình cài đặt...${NC}\n"
-
-    if [ -n "$CIVITAI_TOKEN" ] && [ "${DRY_RUN:-0}" != "1" ] && command -v curl &>/dev/null; then
-        echo -e "${BLUE}🔎 Đang kiểm tra token với Civitai...${NC}"
-        TEST_URL="https://civitai.com/api/download/models/1546777?fileId=1446530&token=$ENCODED_TOKEN"
-        TEST_CODE=$(curl -s $CURL_SSL_OPT -o /dev/null -w "%{http_code}" -L --max-time 15 -I "$TEST_URL" 2>/dev/null)
-        if [[ "$TEST_CODE" =~ ^(401|403)$ ]]; then
-            echo -e "${RED}❌ Token KHÔNG hợp lệ (HTTP $TEST_CODE - Authorization failed).${NC}"
-            echo -e "${YELLOW}   Nguyên nhân thường gặp: dán nhầm cả 'token=xxx' thay vì chỉ dán riêng chuỗi token.${NC}"
-            echo -e "${YELLOW}   Lấy token đúng tại: https://civitai.com/user/account -> API Keys${NC}"
-            echo -e "${YELLOW}   Bạn có muốn tiếp tục dù token sai? Các model cần đăng nhập sẽ tải lỗi. (y/N)${NC}"
-            read -r CONTINUE_BAD_TOKEN
-            if [[ ! "$CONTINUE_BAD_TOKEN" =~ ^[Yy]$ ]]; then
-                echo -e "${RED}Đã hủy. Chạy lại script và nhập đúng token.${NC}"
-                return 1
-            fi
-        elif [[ "$TEST_CODE" == "000" ]]; then
-            echo -e "${YELLOW}⚠️  Không kết nối được để kiểm tra token (có thể do lỗi SSL/mạng).${NC}"
-            echo -e "${YELLOW}   Nếu gặp lỗi SSL certificate, thử chạy lại với: DISABLE_SSL_VERIFY=1 bash $0${NC}"
-        else
-            echo -e "${GREEN}✅ Token hợp lệ (HTTP $TEST_CODE).${NC}"
-        fi
-    fi
-
-    echo -e "\n${BLUE}🔄 Cập nhật ComfyUI chính...${NC}"
+    echo -e "\n${BLUE}🔄 Cập nhật/Cài đặt ComfyUI chính tại:${NC} $COMFY_BASE"
     if [ -d "$COMFY_BASE/.git" ]; then
-        (cd "$COMFY_BASE" && env $GIT_SSL_ENV git pull --quiet 2>&1 | tail -5)
+        echo -e "   ${YELLOW}🔄 Repo đã tồn tại, tiến hành git pull...${NC}"
+        (cd "$COMFY_BASE" && env ${GIT_SSL_ENV:-} git pull --quiet 2>&1 | tail -5) || echo -e "   ${YELLOW}⚠️ Git pull có cảnh báo.${NC}"
+    elif [ -f "$COMFY_BASE/main.py" ]; then
+        echo -e "   ${GREEN}✅ Phát hiện ComfyUI sẵn có (không dùng Git repo).${NC}"
     else
-        echo -e "${YELLOW}⚠️  ComfyUI không phải git, bỏ qua.${NC}"
+        echo -e "   ${BLUE}📦 Tải mới ComfyUI Core từ GitHub...${NC}"
+        clone_or_pull "https://github.com/comfyanonymous/ComfyUI.git" "$COMFY_BASE" "ComfyUI Core"
     fi
+    return 0
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

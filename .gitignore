@@ -1,5 +1,34 @@
+# Ignore downloaded models and large binary files
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.gguf
+*.onnx
+*.tar
+*.zip
+*.7z
+
+# Ignore ComfyUI installation & output directories if created inside workspace
+ComfyUI/
+comfyui-output/
+output/
+downloads/
+models/
+custom_nodes/
+
+# Ignore logs & temporary files
 *.log
 *.tmp
 *.bak
+pip_install.log
+setup_log*.txt
 manifest.json
+SETUP_REPORT.md
+setup_report.json
+
+# Python cache
 __pycache__/
+*.pyc
+.ipynb_checkpoints/

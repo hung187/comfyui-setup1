@@ -3,7 +3,7 @@
 run_stage_03() {
     init_runtime_env || return 1
 
-    echo -e "\n${BLUE}📦 CÀI ĐẶT CUSTOM NODES...${NC}"
+    echo -e "\n${BLUE}📦 Stage 03: Cài đặt Custom Nodes...${NC}"
     mkdir -p "$CUSTOM_NODES"
 
     local config_file="$SCRIPT_DIR/config/nodes_list.txt"
@@ -20,6 +20,7 @@ run_stage_03() {
         url=$(resolve_config_value "$url")
         path=$(resolve_config_value "$path")
         desc=$(resolve_config_value "$desc")
+        
         if [ -z "$path" ]; then
             path="$CUSTOM_NODES/$(basename "$url" .git)"
         fi
@@ -29,7 +30,7 @@ run_stage_03() {
         clone_or_pull "$url" "$path" "$desc"
     done < "$config_file"
 
-    echo -e "\n${BLUE}📦 CÀI DEPENDENCIES CHO CUSTOM NODES...${NC}"
+    echo -e "\n${BLUE}📦 Cài đặt Dependencies cho Custom Nodes...${NC}"
     for dir in "$CUSTOM_NODES"/*/; do
         [ -d "$dir" ] && install_requirements "$dir"
     done
