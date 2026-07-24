@@ -11,6 +11,7 @@ show_help() {
     echo "Tùy chọn:"
     echo "  --comfy-dir <PATH>    Chỉ định trực tiếp thư mục cài đặt ComfyUI"
     echo "  --civitai-token <TOK> Nhập API Token của Civitai"
+    echo "  --reload              Nạp nhanh Custom Nodes mới mà không đụng đến GPU"
     echo "  --dry-run             Chế độ kiểm tra nhanh (không tải file nặng/torch)"
     echo "  --no-ssl-verify       Bỏ qua kiểm tra chứng chỉ SSL"
     echo "  --help                Hiển thị hướng dẫn này"
@@ -18,6 +19,8 @@ show_help() {
 }
 
 # Parse CLI arguments
+DO_RELOAD=0
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         --comfy-dir)
@@ -27,6 +30,10 @@ while [[ $# -gt 0 ]]; do
         --civitai-token)
             export CIVITAI_TOKEN="$2"
             shift 2
+            ;;
+        --reload)
+            DO_RELOAD=1
+            shift
             ;;
         --dry-run)
             export DRY_RUN=1
@@ -45,6 +52,12 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [ "$DO_RELOAD" -eq 1 ]; then
+    chmod +x "$SCRIPT_DIR/reload.sh" 2>/dev/null || true
+    exec "$SCRIPT_DIR/reload.sh"
+    exit 0
+fi
 
 source "$SCRIPT_DIR/scripts/common.sh"
 source "$SCRIPT_DIR/scripts/01_env_setup.sh"
