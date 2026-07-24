@@ -254,37 +254,48 @@ generate_mirror_urls() {
 exec_download_tool() {
     local url="$1"
     local temp_file="$2"
-    local success=0
 
     if command -v aria2c &>/dev/null; then
         echo -e "   ${BLUE}⚡ Tải qua aria2c...${NC}"
-        aria2c $ARIA2_SSL_OPT \
+        if aria2c $ARIA2_SSL_OPT \
                --max-connection-per-server=4 \
                --split=4 \
                --console-log-level=error \
-               --summary-interval=2 \
+               --summary-interval=0 \
                --timeout=20 \
                --max-tries=3 \
                --retry-wait=2 \
                --continue=true \
                --dir="$(dirname "$temp_file")" \
                --out="$(basename "$temp_file")" \
-               "$url" >/dev/null 2>&1 && success=1
+               "$url" >/dev/null 2>&1; then
+            if [ -f "$temp_file" ] && [ "$(stat -c%s "$temp_file" 2>/dev/null || stat -f%z "$temp_file" 2>/dev/null || echo 0)" -gt 1048576 ]; then
+                return 0
+            fi
+        fi
     fi
 
-    if [ $success -eq 0 ] && command -v wget &>/dev/null; then
+    if command -v wget &>/dev/null; then
         echo -e "   ${BLUE}🐢 Tải qua wget...${NC}"
-        wget -c $WGET_SSL_OPT --tries=3 --waitretry=2 --timeout=20 -q --show-progress -O "$temp_file" "$url" && success=1
+        if wget -c $WGET_SSL_OPT --tries=3 --waitretry=2 --timeout=20 -q --show-progress -O "$temp_file" "$url"; then
+            if [ -f "$temp_file" ] && [ "$(stat -c%s "$temp_file" 2>/dev/null || stat -f%z "$temp_file" 2>/dev/null || echo 0)" -gt 1048576 ]; then
+                return 0
+            fi
+        fi
     fi
 
-    if [ $success -eq 0 ] && command -v curl &>/dev/null; then
+    if command -v curl &>/dev/null; then
         echo -e "   ${BLUE}🔄 Tải qua curl...${NC}"
-        curl -L -C - $CURL_SSL_OPT --retry 2 --retry-delay 2 --connect-timeout 20 -o "$temp_file" "$url" >/dev/null 2>&1 && success=1
+        if curl -L -C - $CURL_SSL_OPT --retry 2 --retry-delay 2 --connect-timeout 20 -o "$temp_file" "$url" >/dev/null 2>&1; then
+            if [ -f "$temp_file" ] && [ "$(stat -c%s "$temp_file" 2>/dev/null || stat -f%z "$temp_file" 2>/dev/null || echo 0)" -gt 1048576 ]; then
+                return 0
+            fi
+        fi
     fi
 
-    if [ $success -eq 0 ] && command -v python3 &>/dev/null; then
+    if command -v python3 &>/dev/null; then
         echo -e "   ${BLUE}🐍 Tải qua Python urllib...${NC}"
-        $PYTHON_CMD - "$url" "$temp_file" <<'PY' >/dev/null 2>&1 && success=1
+        if $PYTHON_CMD - "$url" "$temp_file" <<'PY' >/dev/null 2>&1
 import sys, urllib.request, ssl
 url, out = sys.argv[1], sys.argv[2]
 ctx = ssl.create_default_context()
@@ -294,9 +305,14 @@ req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
 with urllib.request.urlopen(req, context=ctx, timeout=30) as resp, open(out, 'wb') as f:
     f.write(resp.read())
 PY
+        then
+            if [ -f "$temp_file" ] && [ "$(stat -c%s "$temp_file" 2>/dev/null || stat -f%z "$temp_file" 2>/dev/null || echo 0)" -gt 1048576 ]; then
+                return 0
+            fi
+        fi
     fi
 
-    return $success
+    return 1
 }
 
 # Smart Model Downloader with multi-source fallback mirror engine
