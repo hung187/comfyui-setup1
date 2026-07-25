@@ -59,6 +59,7 @@ if [ -d "$COMFY_DIR" ] && [ -f "$COMFY_DIR/main.py" ]; then
     # 1. Kill old process safely and free port 8188
     fuser -k -9 8188/tcp 2>/dev/null || true
     pkill -9 -f "main.py" 2>/dev/null || true
+    pkill -f "cloudflared" 2>/dev/null || true
     sleep 2
 
     cd "$COMFY_DIR"
@@ -89,6 +90,41 @@ if [ -d "$COMFY_DIR" ] && [ -f "$COMFY_DIR/main.py" ]; then
         echo -e "\033[0;33m⚠️ ComfyUI vẫn đang nạp các Custom Node nặng trong background...\033[0m"
         echo -e "\033[0;36m📋 15 Dòng log khởi động gần nhất:\033[0m"
         tail -n 15 "$LOG_FILE" 2>/dev/null || true
+    fi
+
+    # 3. Cloudflared Tunnel for Public Web Access
+    echo -e "\n\033[0;36m🌐 Đang tạo đường dẫn Web công khai (Cloudflared Tunnel)... \033[0m"
+    if ! command -v cloudflared &>/dev/null; then
+        if [ ! -f "/tmp/cloudflared" ]; then
+            wget -q -O /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 2>/dev/null || \
+            curl -fsSL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 2>/dev/null || true
+            chmod +x /tmp/cloudflared 2>/dev/null || true
+        fi
+        CLOUDFLARED_BIN="/tmp/cloudflared"
+    else
+        CLOUDFLARED_BIN="cloudflared"
+    fi
+
+    if [ -x "$CLOUDFLARED_BIN" ] || command -v cloudflared &>/dev/null; then
+        TUNNEL_LOG="/tmp/cloudflared.log"
+        rm -f "$TUNNEL_LOG"
+        $CLOUDFLARED_BIN tunnel --url http://127.0.0.1:8188 > "$TUNNEL_LOG" 2>&1 &
+
+        PUBLIC_URL=""
+        for t in {1..15}; do
+            if [ -f "$TUNNEL_LOG" ]; then
+                PUBLIC_URL=$(grep -oE 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" | head -n 1)
+                [ -n "$PUBLIC_URL" ] && break
+            fi
+            sleep 1
+        done
+
+        if [ -n "$PUBLIC_URL" ]; then
+            echo -e "\033[0;32m===============================================================\033[0m"
+            echo -e "\033[1;33m🔗 ĐƯỜNG DẪN WEB CÔNG KHAI TRUY CẬP COMFYUI TỪ BẤT KỲ ĐÂU:\033[0m"
+            echo -e "\033[1;36m👉 $PUBLIC_URL\033[0m"
+            echo -e "\033[0;32m===============================================================\033[0m"
+        fi
     fi
 else
     echo -e "\033[0;31m❌ Không tìm thấy thư mục ComfyUI hợp lệ trên máy chủ này.\033[0m"

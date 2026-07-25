@@ -10,6 +10,17 @@ run_stage_01() {
     ensure_tool_installed "sha256sum" "coreutils" || true
     ensure_tool_installed "python3" "python3 python3-pip" || true
     ensure_tool_installed "jq" "jq" || true
+    ensure_tool_installed "ffmpeg" "ffmpeg" || true
+
+    # Cài thư viện đồ họa hệ thống cho OpenCV / InsightFace / Video Nodes
+    if command -v apt-get &>/dev/null; then
+        echo -e "   ${CYAN}🖼️  Cài đặt thư viện đồ họa hệ thống (libGL, libglib)...${NC}"
+        local SUDO=""
+        [ "$(id -u)" -ne 0 ] && command -v sudo &>/dev/null && SUDO="sudo"
+        $SUDO apt-get update -qq 2>/dev/null || true
+        $SUDO apt-get install -y -qq libgl1-mesa-glx libgl1 libglib2.0-0 ffmpeg &>/dev/null || true
+        echo -e "   ${GREEN}✅ Đã cài xong thư viện đồ họa hệ thống!${NC}"
+    fi
 
     if ! command -v python3 &>/dev/null; then
         echo -e "${RED}❌ Python3 không khả dụng. Không thể tiếp tục.${NC}"
@@ -40,6 +51,11 @@ run_stage_01() {
                 || true
         fi
     fi
+
+    # Tự động dọn dẹp bộ nhớ tạm pip cache để giải phóng 5-8GB đĩa
+    echo -e "   ${CYAN}🧹 Đang dọn dẹp bộ nhớ tạm pip cache để tiết kiệm đĩa...${NC}"
+    $PIP_BASE_CMD cache purge >> "$PIP_LOG" 2>&1 || true
+    echo -e "   ${GREEN}✅ Đã dọn dẹp bộ nhớ tạm pip cache thành công!${NC}"
 
     echo -e "${GREEN}✅ Môi trường Python đã hoàn tất.${NC}"
     check_disk_space

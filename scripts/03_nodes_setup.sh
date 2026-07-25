@@ -34,6 +34,9 @@ run_stage_03() {
     for dir in "$CUSTOM_NODES"/*/; do
         [ -d "$dir" ] && install_requirements "$dir"
     done
+
+    echo -e "   ${CYAN}🧹 Dọn dẹp bộ nhớ tạm pip cache để giải phóng đĩa...${NC}"
+    $PIP_BASE_CMD cache purge >> "$COMFY_BASE/pip_install.log" 2>&1 || true
     return 0
 }
 
