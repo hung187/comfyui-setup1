@@ -13,6 +13,8 @@ show_help() {
     echo "  --civitai-token <TOK> Nhập API Token của Civitai"
     echo "  --gdrive              Tự động lưu ảnh từ ComfyUI vào Google Drive"
     echo "  --gdrive-folder <DIR> Tên thư mục trên Google Drive (mặc định: ComfyUI_Output)"
+    echo "  --only-nodes          Chỉ cài đặt ComfyUI + Custom Nodes (bỏ qua tải Models)"
+    echo "  --only-models         Chỉ tải Models (bỏ qua cài đặt Custom Nodes)"
     echo "  --reload              Nạp nhanh Custom Nodes mới mà không đụng đến GPU"
     echo "  --dry-run             Chế độ kiểm tra nhanh (không tải file nặng/torch)"
     echo "  --no-ssl-verify       Bỏ qua kiểm tra chứng chỉ SSL"
@@ -22,6 +24,8 @@ show_help() {
 
 # Parse CLI arguments
 DO_RELOAD=0
+ONLY_NODES=0
+ONLY_MODELS=0
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -40,6 +44,14 @@ while [[ $# -gt 0 ]]; do
         --gdrive-folder)
             export GDRIVE_FOLDER="$2"
             shift 2
+            ;;
+        --only-nodes|--nodes-only)
+            ONLY_NODES=1
+            shift
+            ;;
+        --only-models|--models-only)
+            ONLY_MODELS=1
+            shift
             ;;
         --reload)
             DO_RELOAD=1
@@ -79,9 +91,20 @@ source "$SCRIPT_DIR/scripts/06_gdrive_sync.sh"
 
 main() {
     run_stage_01 "$@" || return 1
+    
+    if [ "$ONLY_MODELS" -eq 1 ]; then
+        run_stage_04 "$@" || return 1
+        run_stage_05 "$@" || return 1
+        return 0
+    fi
+
     run_stage_02 "$@" || return 1
     run_stage_03 "$@" || return 1
-    run_stage_04 "$@" || return 1
+
+    if [ "$ONLY_NODES" -eq 0 ]; then
+        run_stage_04 "$@" || return 1
+    fi
+
     run_stage_05 "$@" || return 1
     run_stage_06 "$@" || return 1
 }
