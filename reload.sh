@@ -13,6 +13,8 @@ find_comfy_dir() {
 
     # 2. Priority candidate search requiring main.py
     local candidates=(
+        "/app/comfyUI"
+        "/app/ComfyUI"
         "/workspace/ComfyUI"
         "/workspace/comfyui"
         "/workspace/ComfyUI_windows_portable/ComfyUI"
