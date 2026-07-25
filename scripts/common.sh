@@ -424,9 +424,10 @@ download_model_smart() {
     for url in "${candidate_urls[@]}"; do
         attempt_count=$((attempt_count + 1))
         if [ $attempt_count -eq 1 ]; then
-            echo -e "   ${BLUE}🌐 Nguồn chính:${NC} $url"
+            echo -e "   ${BLUE}🌐 Link chính gốc:${NC} $url"
         else
-            echo -e "   ${YELLOW}🔄 Nguồn dự phòng (Link phụ #${attempt_count-1}):${NC} $url"
+            local alt_idx=$((attempt_count - 1))
+            echo -e "   ${YELLOW}🔄 Link phụ dự phòng #${alt_idx}:${NC} $url"
             is_mirror=1
         fi
 
