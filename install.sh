@@ -11,6 +11,8 @@ show_help() {
     echo "Tùy chọn:"
     echo "  --comfy-dir <PATH>    Chỉ định trực tiếp thư mục cài đặt ComfyUI"
     echo "  --civitai-token <TOK> Nhập API Token của Civitai"
+    echo "  --gdrive              Tự động lưu ảnh từ ComfyUI vào Google Drive"
+    echo "  --gdrive-folder <DIR> Tên thư mục trên Google Drive (mặc định: ComfyUI_Output)"
     echo "  --reload              Nạp nhanh Custom Nodes mới mà không đụng đến GPU"
     echo "  --dry-run             Chế độ kiểm tra nhanh (không tải file nặng/torch)"
     echo "  --no-ssl-verify       Bỏ qua kiểm tra chứng chỉ SSL"
@@ -29,6 +31,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --civitai-token)
             export CIVITAI_TOKEN="$2"
+            shift 2
+            ;;
+        --gdrive)
+            export ENABLE_GDRIVE=1
+            shift
+            ;;
+        --gdrive-folder)
+            export GDRIVE_FOLDER="$2"
             shift 2
             ;;
         --reload)
@@ -65,6 +75,7 @@ source "$SCRIPT_DIR/scripts/02_comfy_core.sh"
 source "$SCRIPT_DIR/scripts/03_nodes_setup.sh"
 source "$SCRIPT_DIR/scripts/04_models_dl.sh"
 source "$SCRIPT_DIR/scripts/05_manifest.sh"
+source "$SCRIPT_DIR/scripts/06_gdrive_sync.sh"
 
 main() {
     run_stage_01 "$@" || return 1
@@ -72,6 +83,7 @@ main() {
     run_stage_03 "$@" || return 1
     run_stage_04 "$@" || return 1
     run_stage_05 "$@" || return 1
+    run_stage_06 "$@" || return 1
 }
 
 main "$@"

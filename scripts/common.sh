@@ -544,11 +544,5 @@ install_requirements() {
             || $PIP_BASE_CMD install -r "$dir/requirements.txt" $PIP_SSL_OPT >> "$COMFY_BASE/pip_install.log" 2>&1 \
             || true
     fi
-
-    if [ -f "$dir/install.py" ]; then
-        echo -e "   ${CYAN}⚙️  Chạy install.py cho $(basename "$dir")${NC}"
-        $PYTHON_CMD "$dir/install.py" >> "$COMFY_BASE/pip_install.log" 2>&1 || true
-    fi
-
     return 0
 }
