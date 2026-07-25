@@ -63,8 +63,8 @@ resolve_comfy_base() {
     
     # Common Cloud & Server Environments
     candidates+=(
-        "/app/comfyUI"
         "/app/ComfyUI"
+        "/app/comfyUI"
         "/content/drive/MyDrive/ComfyUI"
         "/content/ComfyUI"
         "/workspace/ComfyUI"
