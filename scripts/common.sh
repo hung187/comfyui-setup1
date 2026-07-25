@@ -51,59 +51,112 @@ resolve_config_value() {
     printf '%s' "$value"
 }
 
-# Auto-detect ComfyUI path across Cloud Servers & Local Machines
+# Auto-detect ComfyUI path across Cloud Servers & Local Machines + Consolidate Duplicates
 resolve_comfy_base() {
     local candidate_cli="${1:-}"
-    
-    # Priority list of possible paths
-    local candidates=()
-    [ -n "$candidate_cli" ] && candidates+=("$candidate_cli")
-    [ -n "${COMFY_BASE:-}" ] && candidates+=("$COMFY_BASE")
-    [ -n "${COMFYUI_PATH:-}" ] && candidates+=("$COMFYUI_PATH")
-    
-    # Common Cloud & Server Environments
-    candidates+=(
+    local primary_target=""
+
+    # CLI / Env explicit override takes priority
+    if [ -n "$candidate_cli" ]; then
+        primary_target="$candidate_cli"
+    elif [ -n "${COMFY_BASE:-}" ]; then
+        primary_target="$COMFY_BASE"
+    elif [ -n "${COMFYUI_PATH:-}" ]; then
+        primary_target="$COMFYUI_PATH"
+    fi
+
+    # Known common cloud & server paths
+    local search_paths=(
         "/app/ComfyUI"
         "/app/comfyUI"
-        "/content/drive/MyDrive/ComfyUI"
-        "/content/ComfyUI"
         "/workspace/ComfyUI"
         "/workspace/comfyui"
+        "/content/ComfyUI"
+        "/content/drive/MyDrive/ComfyUI"
         "/kaggle/working/ComfyUI"
         "/opt/ml/code/ComfyUI"
         "$HOME/ComfyUI"
         "$HOME/comfyui"
-        "$HOME/Desktop/ComfyUI"
         "$PWD/ComfyUI"
         "$PWD"
     )
 
-    # 1st PASS: Search for existing ComfyUI installations (containing main.py or folder_paths.py)
-    for path in "${candidates[@]}"; do
-        [ -z "$path" ] && continue
-        if [ -d "$path" ] && { [ -f "$path/main.py" ] || [ -f "$path/folder_paths.py" ] || [ -f "$path/nodes.py" ]; }; then
-            echo -e "${GREEN}🔍 Phát hiện thư mục ComfyUI hiện có tại:${NC} $path" >&2
-            printf '%s\n' "$path"
-            return 0
+    # 1. Collect all valid existing ComfyUI installations
+    local existing_dirs=()
+    for p in "${search_paths[@]}"; do
+        if [ -d "$p" ] && { [ -f "$p/main.py" ] || [ -f "$p/folder_paths.py" ]; }; then
+            local real_p
+            real_p=$(readlink -f "$p" 2>/dev/null || echo "$p")
+            local already_added=0
+            for e in "${existing_dirs[@]}"; do
+                if [ "$e" = "$real_p" ]; then
+                    already_added=1
+                    break
+                fi
+            done
+            if [ $already_added -eq 0 ]; then
+                existing_dirs+=("$real_p")
+            fi
         fi
     done
 
-    # 2nd PASS: Use the first existing & writable directory
-    for path in "${candidates[@]}"; do
-        [ -z "$path" ] && continue
-        if mkdir -p "$path" 2>/dev/null; then
-            echo -e "${YELLOW}📁 Tạo/Sử dụng thư mục ComfyUI tại:${NC} $path" >&2
-            printf '%s\n' "$path"
-            return 0
-        fi
-    done
+    # Fallback to system-wide search if no standard path had main.py
+    if [ ${#existing_dirs[@]} -eq 0 ]; then
+        while IFS= read -r found_main; do
+            if [ -n "$found_main" ]; then
+                local found_dir
+                found_dir=$(dirname "$found_main")
+                local real_p
+                real_p=$(readlink -f "$found_dir" 2>/dev/null || echo "$found_dir")
+                existing_dirs+=("$real_p")
+            fi
+        done < <(find /app /workspace /content /root /opt "$HOME" -maxdepth 3 -name "main.py" 2>/dev/null | head -n 5)
+    fi
 
-    # Fallback to home or current workspace
-    local fallback="$HOME/ComfyUI"
-    mkdir -p "$fallback" 2>/dev/null || fallback="$PWD/comfyui-output"
-    mkdir -p "$fallback" 2>/dev/null || true
-    echo -e "${YELLOW}📁 Sử dụng thư mục mặc định:${NC} $fallback" >&2
-    printf '%s\n' "$fallback"
+    # 2. Pick primary target directory
+    if [ -z "$primary_target" ]; then
+        if [ ${#existing_dirs[@]} -gt 0 ]; then
+            primary_target="${existing_dirs[0]}"
+        else
+            if [ -d "/app" ] && [ -w "/app" ]; then
+                primary_target="/app/ComfyUI"
+            elif [ -d "/workspace" ] && [ -w "/workspace" ]; then
+                primary_target="/workspace/ComfyUI"
+            elif [ -d "/content" ] && [ -w "/content" ]; then
+                primary_target="/content/ComfyUI"
+            else
+                primary_target="$HOME/ComfyUI"
+            fi
+        fi
+    fi
+
+    primary_target=$(readlink -f "$primary_target" 2>/dev/null || echo "$primary_target")
+    mkdir -p "$primary_target" 2>/dev/null || true
+
+    # 3. Consolidate & merge duplicate ComfyUI directories into primary_target
+    if [ ${#existing_dirs[@]} -gt 1 ]; then
+        echo -e "${YELLOW}🔍 Phát hiện có ${#existing_dirs[@]} thư mục ComfyUI trên hệ thống!${NC}" >&2
+        echo -e "${GREEN}🎯 Chọn thư mục chính:${NC} $primary_target" >&2
+
+        for dup in "${existing_dirs[@]}"; do
+            local dup_real
+            dup_real=$(readlink -f "$dup" 2>/dev/null || echo "$dup")
+            if [ "$dup_real" != "$primary_target" ] && [ -d "$dup_real" ]; then
+                echo -e "${YELLOW}📦 Đang gộp dữ liệu từ thư mục phụ ($dup_real) sang thư mục chính ($primary_target)...${NC}" >&2
+                
+                [ -d "$dup_real/models" ] && mkdir -p "$primary_target/models" && cp -rn "$dup_real/models/"* "$primary_target/models/" 2>/dev/null || true
+                [ -d "$dup_real/custom_nodes" ] && mkdir -p "$primary_target/custom_nodes" && cp -rn "$dup_real/custom_nodes/"* "$primary_target/custom_nodes/" 2>/dev/null || true
+                [ -d "$dup_real/output" ] && mkdir -p "$primary_target/output" && cp -rn "$dup_real/output/"* "$primary_target/output/" 2>/dev/null || true
+
+                echo -e "${RED}🗑️ Đã gộp dữ liệu xong! Xóa thư mục phụ trùng lặp:${NC} $dup_real" >&2
+                rm -rf "$dup_real" 2>/dev/null || true
+            fi
+        done
+    else
+        echo -e "${GREEN}🔍 Phát hiện thư mục ComfyUI hiện có tại:${NC} $primary_target" >&2
+    fi
+
+    printf '%s\n' "$primary_target"
 }
 
 # Auto-install missing tools dynamically (apt / static binary download)
