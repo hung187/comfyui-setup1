@@ -30,26 +30,20 @@ https://github.com/yolain/ComfyUI-Easy-Use.git|$CUSTOM_NODES/ComfyUI-Easy-Use|Ea
 # 9. LayerStyle: Bộ công cụ xử lý ảnh dạng Layer như Photoshop (Đổ bóng, viền chữ, hòa trộn Blend Mode, cân bằng màu).
 https://github.com/chflame163/ComfyUI_LayerStyle.git|$CUSTOM_NODES/ComfyUI_LayerStyle|LayerStyle
 
-# 10. AnimateDiff Evolved: Biến ảnh tĩnh thành video / animation chuyển động mượt mà bằng công nghệ AnimateDiff.
-https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved.git|$CUSTOM_NODES/ComfyUI-AnimateDiff-Evolved|AnimateDiff Evolved
-
-# 11. Video Helper Suite: Bộ công cụ xử lý video (Đọc file video, cắt ghép, xuất file MP4, GIF, WebP chất lượng cao).
-https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git|$CUSTOM_NODES/ComfyUI-VideoHelperSuite|Video Helper Suite
-
-# 12. IF AI Tools: Tích hợp trí tuệ nhân tạo (LLM) để tự động tạo Prompt thông minh và viết mô tả ảnh.
+# 10. IF AI Tools: Tích hợp trí tuệ nhân tạo (LLM) để tự động tạo Prompt thông minh và viết mô tả ảnh.
 https://github.com/if-ai/ComfyUI-IF_AI_tools.git|$CUSTOM_NODES/ComfyUI-IF_AI_tools|IF AI Tools
 
-# 13. Custom Scripts: Bổ sung tính năng tiện ích cho UI (Gợi ý từ khóa tự động, khóa vị trí node, xem trước ảnh khi rê chuột).
+# 11. Custom Scripts: Bổ sung tính năng tiện ích cho UI (Gợi ý từ khóa tự động, khóa vị trí node, xem trước ảnh khi rê chuột).
 https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git|$CUSTOM_NODES/ComfyUI-Custom-Scripts|Custom Scripts
 
-# 14. N-Sidebar: Thanh công cụ ẩn/hiện bên hông màn hình giúp quản lý danh sách node và thao tác nhanh hơn.
+# 12. N-Sidebar: Thanh công cụ ẩn/hiện bên hông màn hình giúp quản lý danh sách node và thao tác nhanh hơn.
 https://github.com/Nuked88/ComfyUI-N-Sidebar.git|$CUSTOM_NODES/ComfyUI-N-Sidebar|N-Sidebar
 
-# 15. Cloud Manager: Quản lý và kết nối dữ liệu ComfyUI với các dịch vụ đám mây / máy chủ lưu trữ.
+# 13. Cloud Manager: Quản lý và kết nối dữ liệu ComfyUI với các dịch vụ đám mây / máy chủ lưu trữ.
 https://github.com/daveinme/ComfyUI-Cloud-Manager.git|$CUSTOM_NODES/ComfyUI-Cloud-Manager|Cloud Manager
 
-# 16. Ultimate SD Upscale: Phóng to ảnh (Upscale) nét gấp 4x-8x mà không bị vỡ chi tiết bằng kỹ thuật chia ô (Tile Upscale).
+# 14. Ultimate SD Upscale: Phóng to ảnh (Upscale) nét gấp 4x-8x mà không bị vỡ chi tiết bằng kỹ thuật chia ô (Tile Upscale).
 https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git|$CUSTOM_NODES/ComfyUI_UltimateSDUpscale|Ultimate SD Upscale
 
-# 17. TRELLIS2: Công cụ tạo vật thể mô hình 3D (3D Mesh / Texture / Shape) trực tiếp từ bức ảnh 2D.
+# 15. TRELLIS2: Công cụ tạo vật thể mô hình 3D (3D Mesh / Texture / Shape) trực tiếp từ bức ảnh 2D.
 https://github.com/PozzettiAndrea/ComfyUI-TRELLIS2.git|$CUSTOM_NODES/ComfyUI-TRELLIS2|TRELLIS2
