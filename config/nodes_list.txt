@@ -36,14 +36,11 @@ https://github.com/if-ai/ComfyUI-IF_AI_tools.git|$CUSTOM_NODES/ComfyUI-IF_AI_too
 # 11. Custom Scripts: Bổ sung tính năng tiện ích cho UI (Gợi ý từ khóa tự động, khóa vị trí node, xem trước ảnh khi rê chuột).
 https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git|$CUSTOM_NODES/ComfyUI-Custom-Scripts|Custom Scripts
 
-# 12. N-Sidebar: Thanh công cụ ẩn/hiện bên hông màn hình giúp quản lý danh sách node và thao tác nhanh hơn.
-https://github.com/Nuked88/ComfyUI-N-Sidebar.git|$CUSTOM_NODES/ComfyUI-N-Sidebar|N-Sidebar
-
-# 13. Cloud Manager: Quản lý và kết nối dữ liệu ComfyUI với các dịch vụ đám mây / máy chủ lưu trữ.
+# 12. Cloud Manager: Quản lý và kết nối dữ liệu ComfyUI với các dịch vụ đám mây / máy chủ lưu trữ.
 https://github.com/daveinme/ComfyUI-Cloud-Manager.git|$CUSTOM_NODES/ComfyUI-Cloud-Manager|Cloud Manager
 
-# 14. Ultimate SD Upscale: Phóng to ảnh (Upscale) nét gấp 4x-8x mà không bị vỡ chi tiết bằng kỹ thuật chia ô (Tile Upscale).
+# 13. Ultimate SD Upscale: Phóng to ảnh (Upscale) nét gấp 4x-8x mà không bị vỡ chi tiết bằng kỹ thuật chia ô (Tile Upscale).
 https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git|$CUSTOM_NODES/ComfyUI_UltimateSDUpscale|Ultimate SD Upscale
 
-# 15. TRELLIS2: Công cụ tạo vật thể mô hình 3D (3D Mesh / Texture / Shape) trực tiếp từ bức ảnh 2D.
+# 14. TRELLIS2: Công cụ tạo vật thể mô hình 3D (3D Mesh / Texture / Shape) trực tiếp từ bức ảnh 2D.
 https://github.com/PozzettiAndrea/ComfyUI-TRELLIS2.git|$CUSTOM_NODES/ComfyUI-TRELLIS2|TRELLIS2
