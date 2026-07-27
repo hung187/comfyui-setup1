@@ -8,6 +8,7 @@
 https://civitai.com/api/download/models/3118448?fileId=2998810&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/oneObsession_v23.safetensors|oneObsession v2.3 (IL) - Checkpoint chủ lực cho Illustrious|
 https://civitai.com/api/download/models/1546777?fileId=1446530&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/illustriousXL20_v20.safetensors|Illustrious XL v2.0 - Base Illustrious gốc|
 https://civitai.com/api/download/models/1828803?fileId=1729137&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/ultimateHentaiAnimeRXTRexAnime_rxV1.safetensors|Ultimate Hentai Anime RXTRexAnime rxV1|
+https://civitai.com/api/download/models/2883731?fileId=2763986&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/waiIllustriousSDXL_v170.safetensors|WAI Illustrious SDXL v17.0|
 
 # --- CONTROLNET ---
 https://huggingface.co/lllyasviel/sd_control_collection/resolve/main/thibaud_xl_openpose.safetensors|$MODELS/controlnet/controlnet_openpose_xl.safetensors|ControlNet OpenPose XL|
@@ -37,6 +38,7 @@ https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/diffusion_models/trellis
 https://civitai.com/api/download/models/927531?fileId=835078&token=$ENCODED_TOKEN|$MODELS/loras/Quality/Add_more_details_pony.safetensors|Add More Details (Pony)|
 https://civitai.com/api/download/models/135867?fileId=99264&token=$ENCODED_TOKEN|$MODELS/loras/Quality/add-detail-xl.safetensors|Add Detail XL|
 https://civitai.com/api/download/models/2247497?fileId=2139998&token=$ENCODED_TOKEN|$MODELS/loras/Quality/illustrious_masterpieces_v3.safetensors|Illustrious Masterpieces v3|
+https://civitai.com/api/download/models/2832991?fileId=2719141&token=$ENCODED_TOKEN|$MODELS/loras/Quality/AddMicroDetails_Illustrious_v6.safetensors|Add Micro Details Illustrious v6.0|
 https://civitai.com/api/download/models/1616431?fileId=1516402&token=$ENCODED_TOKEN|$MODELS/loras/Face/bieu_cam-betterahegao.safetensors|Better Ahegao|
 https://civitai.com/api/download/models/338805?fileId=269045&token=$ENCODED_TOKEN|$MODELS/loras/Face/bieu_cam-toro_ahe_pony.safetensors|Toro Ahegao (Pony)|
 https://civitai.com/api/download/models/501402?fileId=419041&token=$ENCODED_TOKEN|$MODELS/loras/Hands/pony_good_hands.safetensors|Pony Good Hands|
