@@ -4,11 +4,10 @@
 # (Các link phụ dự phòng được tự động nạp từ tệp config/models_backup_list.csv)
 # ================================================================================================================================
 
-# --- CHECKPOINTS (IL / FLUX) ---
+# --- CHECKPOINTS (IL) ---
 https://civitai.com/api/download/models/3016651?fileId=2895643&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/oneObsession_v22.safetensors|oneObsession v2.2 (IL) - Checkpoint chủ lực cho Illustrious|
 https://civitai.com/api/download/models/1546777?fileId=1446530&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/illustriousXL20_v20.safetensors|Illustrious XL v2.0 - Base Illustrious gốc|
 https://civitai.com/api/download/models/1828803?fileId=1729137&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/ultimateHentaiAnimeRXTRexAnime_rxV1.safetensors|Ultimate Hentai Anime RXTRexAnime rxV1|
-https://civitai.com/api/download/models/3112187?fileId=2995247&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/flux-2-klein-9b-fp8.safetensors|FLUX.2 Klein 9B FP8|
 
 # --- CONTROLNET ---
 https://huggingface.co/lllyasviel/sd_control_collection/resolve/main/thibaud_xl_openpose.safetensors|$MODELS/controlnet/controlnet_openpose_xl.safetensors|ControlNet OpenPose XL|
@@ -62,4 +61,3 @@ https://civitai.com/api/download/models/2073605?fileId=1969798&token=$ENCODED_TO
 https://civitai.com/api/download/models/1058897?fileId=964472&token=$ENCODED_TOKEN|$MODELS/loras/Pose/Midis_Defeat2_IL.safetensors|Midis Defeat2 IL|
 https://civitai.com/api/download/models/936014?fileId=843344&token=$ENCODED_TOKEN|$MODELS/loras/Pose/Fumihiko_Defeat_PONY.safetensors|Fumihiko Defeat PONY|
 https://civitai.com/api/download/models/2196580?fileId=2094818&token=$ENCODED_TOKEN|$MODELS/loras/Pose/phong_cach-hands-free_blowjob-IL.safetensors|Hands-Free Blowjob (IL)|
-https://civitai.com/api/download/models/2724895?fileId=2610838&token=$ENCODED_TOKEN|$MODELS/loras/Quality/flux2-pony-lora.safetensors|FLUX.2 Pony LoRA|

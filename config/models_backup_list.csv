@@ -3,11 +3,10 @@
 # Nguồn tải đa dạng: HuggingFace, HuggingFace Asian Mirror, GitHub Releases, GHProxy, Civitai Red
 # ================================================================================================================================
 
-# --- CHECKPOINTS (IL / FLUX) ---
+# --- CHECKPOINTS (IL) ---
 $MODELS/checkpoints/IL/oneObsession_v22.safetensors|https://civitai.red/api/download/models/3016651?fileId=2895643&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/3016651?fileId=2895643|
 $MODELS/checkpoints/IL/illustriousXL20_v20.safetensors|https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0/resolve/main/Illustrious-XL-v2.0.safetensors|https://hf-mirror.com/OnomaAIResearch/Illustrious-XL-v2.0/resolve/main/Illustrious-XL-v2.0.safetensors|https://civitai.red/api/download/models/1546777?fileId=1446530&token=$ENCODED_TOKEN
 $MODELS/checkpoints/IL/ultimateHentaiAnimeRXTRexAnime_rxV1.safetensors|https://civitai.red/api/download/models/1828803?fileId=1729137&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1828803?fileId=1729137|
-$MODELS/checkpoints/IL/flux-2-klein-9b-fp8.safetensors|https://civitai.red/api/download/models/3112187?fileId=2995247&token=$ENCODED_TOKEN|https://huggingface.co/black-forest-labs/FLUX.2-klein-9b-fp8/resolve/main/flux-2-klein-9b-fp8.safetensors?download=true|
 
 # --- CONTROLNET ---
 $MODELS/controlnet/controlnet_openpose_xl.safetensors|https://hf-mirror.com/lllyasviel/sd_control_collection/resolve/main/thibaud_xl_openpose.safetensors|https://huggingface.co/thibaud/controlnet-openpose-sdxl-1.0/resolve/main/OpenPoseXL2.safetensors?download=true|https://hf.co/lllyasviel/sd_control_collection/resolve/main/thibaud_xl_openpose.safetensors
@@ -59,4 +58,3 @@ $MODELS/loras/Pose/NSFW-22-H-e8.safetensors|https://civitai.red/api/download/mod
 $MODELS/loras/Pose/Midis_Defeat2_IL.safetensors|https://civitai.red/api/download/models/1058897?fileId=964472&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1058897?fileId=964472|
 $MODELS/loras/Pose/Fumihiko_Defeat_PONY.safetensors|https://civitai.red/api/download/models/936014?fileId=843344&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/936014?fileId=843344|
 $MODELS/loras/Pose/phong_cach-hands-free_blowjob-IL.safetensors|https://civitai.red/api/download/models/2196580?fileId=2094818&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2196580?fileId=2094818|
-$MODELS/loras/Quality/flux2-pony-lora.safetensors|https://civitai.red/api/download/models/2724895?fileId=2610838&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2724895?fileId=2610838|
