@@ -370,6 +370,50 @@ PY
     return 1
 }
 
+# Kiểm tra link còn sống hay không (HEAD request nhanh, timeout 10 giây)
+check_url_alive() {
+    local url="$1"
+
+    # Với link Civitai hoặc HuggingFace có token - bỏ qua check để tránh reveal token qua log
+    # Chỉ kiểm tra HTTP status code >= 200 và < 400
+    local http_code=0
+
+    if command -v curl &>/dev/null; then
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 10 --connect-timeout 8 \
+            -L --head \
+            ${CURL_SSL_OPT} \
+            -A "Mozilla/5.0" \
+            "$url" 2>/dev/null || echo "0")
+    elif command -v wget &>/dev/null; then
+        # wget fallback: thử spider mode
+        if wget -q --spider --timeout=10 --tries=1 ${WGET_SSL_OPT} "$url" 2>/dev/null; then
+            http_code=200
+        else
+            http_code=0
+        fi
+    else
+        # Không có curl/wget: bỏ qua kiểm tra, coi như còn sống
+        echo -e "   ${YELLOW}⚠️  Không có curl/wget để kiểm tra link, bỏ qua kiểm tra.${NC}"
+        return 0
+    fi
+
+    case "$http_code" in
+        200|201|206|301|302|303|307|308)
+            return 0 ;;  # Link còn sống
+        401|403)
+            # Cần xác thực (token) - vẫn có thể tải được nếu đính kèm token
+            return 0 ;;
+        404|410|451)
+            return 1 ;;  # Link chết / đã xóa
+        0|"")
+            return 1 ;;  # Không kết nối được
+        *)
+            # Các lỗi 5xx server, coi như tạm chết
+            return 1 ;;
+    esac
+}
+
 # Smart Model Downloader with multi-source fallback mirror engine
 download_model_smart() {
     local primary_url="$1"
@@ -431,7 +475,17 @@ download_model_smart() {
             is_mirror=1
         fi
 
+        # === KIỂM TRA LINK CÒN SỐNG TRƯỚC KHI TẢI ===
+        echo -ne "   ${CYAN}🔍 Đang kiểm tra link...${NC} "
+        if ! check_url_alive "$url"; then
+            echo -e "${RED}❌ Link chết / không phản hồi. Bỏ qua, thử link tiếp theo...${NC}"
+            log_event "DEAD_LINK" "$description | $url"
+            continue
+        fi
+        echo -e "${GREEN}✅ Link OK${NC}"
+
         rm -f "$temp_file"
+
         if exec_download_tool "$url" "$temp_file"; then
             if [ -f "$temp_file" ]; then
                 local fsize
