@@ -16,7 +16,6 @@ $MODELS/controlnet/illustriousXLCanny_v10.safetensors|https://civitai.red/api/do
 $MODELS/ipadapter/ip-adapter_sdxl_vit-h.safetensors|https://hf-mirror.com/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter_sdxl_vit-h.safetensors|https://hf.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter_sdxl_vit-h.safetensors|
 $MODELS/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors|https://hf-mirror.com/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors|https://hf.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors|
 $MODELS/clip_vision/dino_v3_vit_l.safetensors|https://hf-mirror.com/Comfy-Org/TRELLIS.2/resolve/main/clip_vision/dino_v3_vit_l.safetensors?download=true|https://hf.co/Comfy-Org/TRELLIS.2/resolve/main/clip_vision/dino_v3_vit_l.safetensors?download=true|
-
 # --- INSIGHTFACE & FACE RESTORE ---
 $MODELS/insightface/inswapper_128.onnx|https://huggingface.co/Gourieff/ReActor/resolve/main/models/insightface/inswapper_128.onnx|https://hf-mirror.com/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx|https://hf.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx
 $MODELS/facerestore/codeformer-v0.1.0.pth|https://huggingface.co/sczhou/CodeFormer/resolve/main/codeformer.pth|https://ghproxy.net/https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth|https://gh-proxy.com/https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth

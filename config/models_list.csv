@@ -5,7 +5,7 @@
 # ================================================================================================================================
 
 # --- CHECKPOINTS (IL) ---
-https://civitai.com/api/download/models/3016651?fileId=2895643&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/oneObsession_v22.safetensors|oneObsession v2.2 (IL) - Checkpoint chủ lực cho Illustrious|
+https://civitai.com/api/download/models/3118448?fileId=2998810&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/oneObsession_v23.safetensors|oneObsession v2.3 (IL) - Checkpoint chủ lực cho Illustrious|
 https://civitai.com/api/download/models/1546777?fileId=1446530&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/illustriousXL20_v20.safetensors|Illustrious XL v2.0 - Base Illustrious gốc|
 https://civitai.com/api/download/models/1828803?fileId=1729137&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/ultimateHentaiAnimeRXTRexAnime_rxV1.safetensors|Ultimate Hentai Anime RXTRexAnime rxV1|
 
