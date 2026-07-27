@@ -3,7 +3,9 @@
 run_stage_03() {
     init_runtime_env || return 1
 
-    echo -e "\n${BLUE}📦 Stage 03: Cài đặt Custom Nodes...${NC}"
+    echo -e "\n${MAGENTA}════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}📦 Stage 03: Cài đặt Custom Nodes...${NC}"
+    echo -e "${MAGENTA}════════════════════════════════════════════════════════════════${NC}"
     mkdir -p "$CUSTOM_NODES"
 
     local config_file="$SCRIPT_DIR/config/nodes_list.txt"
@@ -11,6 +13,8 @@ run_stage_03() {
         echo -e "${RED}❌ Không tìm thấy $config_file${NC}"
         return 1
     fi
+
+    local node_ok=0 node_fail=0 node_total=0
 
     while IFS= read -r line; do
         [ -z "$line" ] && continue
@@ -20,14 +24,20 @@ run_stage_03() {
         url=$(resolve_config_value "$url")
         path=$(resolve_config_value "$path")
         desc=$(resolve_config_value "$desc")
-        
+
         if [ -z "$path" ]; then
             path="$CUSTOM_NODES/$(basename "$url" .git)"
         fi
         if [ -z "$desc" ]; then
             desc="$(basename "$url" .git)"
         fi
-        clone_or_pull "$url" "$path" "$desc"
+
+        node_total=$((node_total + 1))
+        if clone_or_pull "$url" "$path" "$desc"; then
+            node_ok=$((node_ok + 1))
+        else
+            node_fail=$((node_fail + 1))
+        fi
     done < "$config_file"
 
     echo -e "\n${BLUE}📦 Cài đặt Dependencies cho Custom Nodes...${NC}"
@@ -37,6 +47,10 @@ run_stage_03() {
 
     echo -e "   ${CYAN}🧹 Dọn dẹp bộ nhớ tạm pip cache để giải phóng đĩa...${NC}"
     $PIP_BASE_CMD cache purge >> "$COMFY_BASE/pip_install.log" 2>&1 || true
+
+    echo -e "\n${MAGENTA}════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}✅ Stage 03 hoàn tất: $node_ok/$node_total nodes cài thành công${NC}$([ $node_fail -gt 0 ] && echo -e " | ${RED}❌ $node_fail thất bại${NC}")"
+    echo -e "${MAGENTA}════════════════════════════════════════════════════════════════${NC}\n"
     return 0
 }
 

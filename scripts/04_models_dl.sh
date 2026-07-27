@@ -7,9 +7,10 @@ run_stage_04() {
     echo -e "${MAGENTA}🚀 Stage 04: Bắt đầu tải Models với cơ chế Multi-Mirror Fallback...${NC}"
     echo -e "${MAGENTA}════════════════════════════════════════════════════════════════${NC}"
 
-    mkdir -p "$MODELS"/checkpoints/{IL,PONY} \
+    # Tạo thư mục đúng với cấu trúc models_list.csv hiện tại
+    mkdir -p "$MODELS"/checkpoints/IL \
              "$MODELS"/controlnet \
-             "$MODELS"/loras/{Quality,Face,Hair,Eyes,Hands,Clothes,Character,Style,Effect,Pose,HENTAI,TU_THE_VIDEO} \
+             "$MODELS"/loras/{Quality,Face,Hands,Character,Style,Effect,Pose} \
              "$MODELS"/vae \
              "$MODELS"/clip_vision \
              "$MODELS"/ipadapter \
@@ -79,6 +80,14 @@ run_stage_04() {
     done
 
     export TOTAL CURRENT LOG_FILE MANIFEST_FILE
+
+    # In báo cáo nhanh sau khi tải xong toàn bộ model
+    local ok_count fail_count
+    ok_count=$(grep -c "| OK_PRIMARY \|| OK_MIRROR |" "$LOG_FILE" 2>/dev/null || echo 0)
+    fail_count=$(grep -c "| FAIL |" "$LOG_FILE" 2>/dev/null || echo 0)
+    echo -e "\n${MAGENTA}════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}✅ Stage 04 hoàn tất: $CURRENT/$TOTAL model xử lý | ✔ $ok_count thành công | ❌ $fail_count thất bại${NC}"
+    echo -e "${MAGENTA}════════════════════════════════════════════════════════════════${NC}\n"
     return 0
 }
 

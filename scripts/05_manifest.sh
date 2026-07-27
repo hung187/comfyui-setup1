@@ -15,7 +15,9 @@ run_stage_05() {
     time_str="${time_str}${minutes}m ${seconds}s"
 
     echo -e "\n${BLUE}📝 Stage 05: Tổng hợp Manifest & Tạo Báo Cáo Tối Ưu Tải Xuống...${NC}"
-    export COMFY_BASE TOTAL MANIFEST_FILE LOG_FILE REPORT_FILE REPORT_JSON ELAPSED_SEC TIME_STR DRY_RUN
+    export COMFY_BASE TOTAL MANIFEST_FILE LOG_FILE REPORT_FILE REPORT_JSON ELAPSED_SEC DRY_RUN
+    # Gán TIME_STR vào env để Python subprocess đọc được
+    export TIME_STR="$time_str"
 
     "$PYTHON_CMD" - "$MANIFEST_FILE" "$REPORT_FILE" "$REPORT_JSON" "${AUTO_INSTALLED_TOOLS[*]}" <<'PY'
 import json
