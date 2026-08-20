@@ -34,7 +34,7 @@ jobs:
 
       - name: Run Production Adversarial Test Suite
         run: |
-          bash -x tests/run_tests.sh
+          bash tests/run_tests.sh
 
       - name: Run Preflight Validation Gate (Read-Only Mode)
         run: |

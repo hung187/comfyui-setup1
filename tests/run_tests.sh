@@ -187,6 +187,9 @@ assert_true() {
         ASSERTIONS_PASSED=$((ASSERTIONS_PASSED + 1))
     else
         echo -e "   ❌ Assertion failed: $desc" >&2
+        if [ -n "${GITHUB_ACTIONS:-}" ]; then
+            echo "::error title=Assertion Failed::[$SCENARIO_NAME] Assertion failed: $desc"
+        fi
         SCENARIO_OK=0
         return 1
     fi
