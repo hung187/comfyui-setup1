@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-gate-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     name: Production Quality & Safety Gate
@@ -27,6 +34,7 @@ jobs:
 
       - name: Run Production Adversarial Test Suite
         run: |
+          export PYTHONDONTWRITEBYTECODE=1
           bash tests/run_tests.sh
 
       - name: Run Preflight Validation Gate (Read-Only Mode)

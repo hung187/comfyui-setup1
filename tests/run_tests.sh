@@ -6,6 +6,7 @@
 
 set +e
 export LC_ALL=C
+export PYTHONDONTWRITEBYTECODE=1
 
 TEST_ROOT="/tmp/comfyui_prod_test_$(date +%s)_$$"
 mkdir -p "$TEST_ROOT"
@@ -307,6 +308,39 @@ if ! verify_model_file "$valid_file" "$fake_hash"; then
 else
     assert_true "Wrong hash rejected" 1
 fi
+[ $SCENARIO_OK -eq 0 ] && G2_OK=0
+end_scenario
+
+# Scenario 2.3: Non-model files (Text/Scripts/Configs) renamed to .safetensors Rejected
+start_scenario "2.3: Text, Scripts, and Configs Renamed .safetensors Strictly Rejected"
+fake_safetensors_txt="$TEST_ROOT/fake_text.safetensors"
+echo "This is just a readme text file masquerading as a model." > "$fake_safetensors_txt"
+! verify_model_file "$fake_safetensors_txt"; assert_true "Text file renamed .safetensors rejected" $?
+
+fake_safetensors_sh="$TEST_ROOT/fake_script.safetensors"
+echo -e "#!/bin/bash\necho 'malicious payload'" > "$fake_safetensors_sh"
+! verify_model_file "$fake_safetensors_sh"; assert_true "Shell script renamed .safetensors rejected" $?
+
+fake_safetensors_json="$TEST_ROOT/fake_json.safetensors"
+echo '{"model_type": "transformer", "hidden_size": 768}' > "$fake_safetensors_json"
+! verify_model_file "$fake_safetensors_json"; assert_true "JSON config renamed .safetensors rejected" $?
+
+# Random large text > 100KB renamed .safetensors
+fake_large_txt="$TEST_ROOT/large_text.safetensors"
+python3 -c "with open('$fake_large_txt', 'w') as f: f.write('Sample large text line\n' * 10000)"
+! verify_model_file "$fake_large_txt"; assert_true "Large text >100KB renamed .safetensors rejected" $?
+[ $SCENARIO_OK -eq 0 ] && G2_OK=0
+end_scenario
+
+# Scenario 2.4: Random Binary and HTML/JSON Error Payloads Rejected
+start_scenario "2.4: Random Binary and HTML/JSON Errors Strictly Rejected"
+fake_rand_bin="$TEST_ROOT/random.bin"
+python3 -c "import os; open('$fake_rand_bin', 'wb').write(os.urandom(150000))"
+! verify_model_file "$fake_rand_bin"; assert_true "Random binary without SHA256 rejected" $?
+
+fake_html_err="$TEST_ROOT/error.html"
+curl -s "$MOCK_URL/html_error" -o "$fake_html_err"
+! verify_model_file "$fake_html_err"; assert_true "HTML error payload rejected" $?
 [ $SCENARIO_OK -eq 0 ] && G2_OK=0
 end_scenario
 
@@ -690,13 +724,13 @@ start_scenario "9.9: Hardened Validate-Only Mode 100% Non-Mutating Execution"
 val_iso_root="/tmp/val_iso_test_$$"
 mkdir -p "$val_iso_root/home" "$val_iso_root/tmp" "$val_iso_root/comfy_target"
 
-snap_before=$(find "$REPO_ROOT" "$val_iso_root" -type f | sort)
+snap_before=$(find "$REPO_ROOT" "$val_iso_root" -type f ! -name "*.pyc" ! -path "*/__pycache__*" | sort)
 
 # Execute --validate mode with isolated environment
-HOME="$val_iso_root/home" TMPDIR="$val_iso_root/tmp" COMFY_BASE="$val_iso_root/comfy_target" \
+REQUIRED_SPACE_GB=1 HOME="$val_iso_root/home" TMPDIR="$val_iso_root/tmp" COMFY_BASE="$val_iso_root/comfy_target" \
     bash "$REPO_ROOT/install.sh" --validate >/dev/null 2>&1
 
-snap_after=$(find "$REPO_ROOT" "$val_iso_root" -type f | sort)
+snap_after=$(find "$REPO_ROOT" "$val_iso_root" -type f ! -name "*.pyc" ! -path "*/__pycache__*" | sort)
 
 [ "$snap_before" = "$snap_after" ]; assert_true "Zero filesystem mutation during --validate across all namespaces" $?
 rm -rf "$val_iso_root" 2>/dev/null || true

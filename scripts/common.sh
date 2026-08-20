@@ -506,9 +506,14 @@ try:
         print("0")
         sys.exit(0)
 
+    # 2. Text file / Shell script rejection (Shebang or non-binary plain text)
+    if head.startswith(b'#!/') or head.startswith(b'# ---') or head.startswith(b'/*') or head.startswith(b'//'):
+        print("0")
+        sys.exit(0)
+
     is_safetensors = filepath.endswith('.safetensors') or filepath.endswith('.safetensors.part')
 
-    # 2. Safetensors validation: uint64 header size + JSON parse + Tensor Offset Body Boundary Check
+    # 3. Safetensors validation: uint64 header size + JSON parse + Tensor Offset Body Boundary Check
     if is_safetensors or len(head) >= 8:
         header_len = int.from_bytes(head[:8], 'little')
         if 0 < header_len < 100000000 and (8 + header_len) <= file_size:
@@ -518,8 +523,8 @@ try:
                 try:
                     meta = json.loads(json_bytes.decode('utf-8'))
                     if isinstance(meta, dict):
-                        # Strict validation of tensor offsets against actual file size
                         body_start = 8 + header_len
+                        valid_tensors_found = 0
                         for k, v in meta.items():
                             if k == '__metadata__':
                                 continue
@@ -536,8 +541,13 @@ try:
                                     # Truncated tensor body!
                                     print("0")
                                     sys.exit(0)
+                                valid_tensors_found += 1
+
+                        if is_safetensors and valid_tensors_found == 0 and '__metadata__' not in meta:
+                            print("0")
+                            sys.exit(0)
+
                         # Passed safetensors structural integrity check
-                        # Check SHA256 if provided
                         if expected_sha:
                             h = hashlib.sha256()
                             with open(filepath, 'rb') as vf:
@@ -554,7 +564,7 @@ try:
                         print("0")
                         sys.exit(0)
 
-    # 3. PyTorch Zip / Pickle validation
+    # 4. PyTorch Zip / Pickle validation
     if head.startswith(b'PK\x03\x04') or head.startswith(b'\x80\x02') or head.startswith(b'BIN'):
         if expected_sha:
             h = hashlib.sha256()
@@ -567,7 +577,7 @@ try:
         print("1")
         sys.exit(0)
 
-    # 4. GGUF format validation
+    # 5. GGUF format validation
     if head.startswith(b'GGUF'):
         if expected_sha:
             h = hashlib.sha256()
@@ -580,11 +590,25 @@ try:
         print("1")
         sys.exit(0)
 
+    # 6. ONNX protobuf format validation
+    if filepath.endswith('.onnx') or filepath.endswith('.onnx.part') or head.startswith(b'\x08'):
+        if expected_sha:
+            h = hashlib.sha256()
+            with open(filepath, 'rb') as vf:
+                while chunk := vf.read(1048576):
+                    h.update(chunk)
+            if h.hexdigest().lower() != expected_sha:
+                print("0")
+                sys.exit(0)
+        print("1")
+        sys.exit(0)
+
+    # If format is safetensors or other known model type and reached here, reject
     if is_safetensors:
         print("0")
         sys.exit(0)
 
-    # Generic binary validation
+    # Generic binary validation ONLY allowed with explicit expected_sha
     if expected_sha:
         h = hashlib.sha256()
         with open(filepath, 'rb') as vf:
@@ -593,8 +617,11 @@ try:
         if h.hexdigest().lower() != expected_sha:
             print("0")
             sys.exit(0)
+        print("1")
+        sys.exit(0)
 
-    print("1")
+    # Unknown un-hashed binary format -> Reject
+    print("0")
 except Exception:
     print("0")
 PY_VERIFY
