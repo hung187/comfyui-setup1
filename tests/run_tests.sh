@@ -711,8 +711,9 @@ dummy_preflight_ran=0
 run_preflight() { dummy_preflight_ran=1; }
 unset COMFY_VALIDATION_SH_LOADED
 source "$REPO_ROOT/scripts/validation.sh"
-run_preflight "full" 1 >/dev/null 2>&1
+REQUIRED_SPACE_GB=1 run_preflight "full" 1 >/dev/null 2>&1
 assert_true "Production run_preflight was loaded and executed" $?
+[ "$dummy_preflight_ran" -eq 0 ]; assert_true "Dummy function was overwritten by production implementation" $?
 
 [ $SCENARIO_OK -eq 0 ] && G9_OK=0
 end_scenario

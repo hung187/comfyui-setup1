@@ -453,11 +453,11 @@ log_event() {
 
 check_disk_space() {
     local avail_space_gb
-    avail_space_gb=$(df -BG "$COMFY_BASE" 2>/dev/null | awk 'NR==2 {print $4}' | sed 's/G//')
+    avail_space_gb=$(df -BG -P "$COMFY_BASE" 2>/dev/null | awk 'NR==2 {print $4}' | tr -d 'G')
     if [ -z "$avail_space_gb" ]; then
         echo -e "${YELLOW}⚠️  Không thể kiểm tra dung lượng ổ đĩa.${NC}"
         return 0
-    elif [ "$avail_space_gb" -lt "$REQUIRED_SPACE_GB" ]; then
+    elif [ "$avail_space_gb" -lt "${REQUIRED_SPACE_GB:-10}" ]; then
         echo -e "${RED}❌ Dung lượng đĩa còn quá ít: ${avail_space_gb}GB, nhỏ hơn ngưỡng tối thiểu ${REQUIRED_SPACE_GB}GB. Tạm dừng để tránh tràn đĩa.${NC}"
         log_event "DISK_LOW" "Space: ${avail_space_gb}GB < ${REQUIRED_SPACE_GB}GB"
         return 1
