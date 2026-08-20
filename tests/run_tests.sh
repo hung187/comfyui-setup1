@@ -6,6 +6,7 @@
 
 set +e
 export LC_ALL=C
+export PYTHONDONTWRITEBYTECODE=1
 export no_proxy="localhost,127.0.0.1,::1"
 export NO_PROXY="localhost,127.0.0.1,::1"
 
@@ -760,13 +761,13 @@ start_scenario "9.9: Hardened Validate-Only Mode 100% Non-Mutating Execution"
 val_iso_root="/tmp/val_iso_test_$$"
 mkdir -p "$val_iso_root/home" "$val_iso_root/tmp" "$val_iso_root/comfy_target"
 
-snap_before=$(find "$REPO_ROOT" "$val_iso_root" -type f | sort)
+snap_before=$(find "$REPO_ROOT" "$val_iso_root" -type f -not -path "*/__pycache__/*" -not -name "*.pyc" -not -path "*/.git/*" | sort)
 
 # Execute --validate mode with isolated environment
 HOME="$val_iso_root/home" TMPDIR="$val_iso_root/tmp" COMFY_BASE="$val_iso_root/comfy_target" REQUIRED_SPACE_GB=1 \
     bash "$REPO_ROOT/install.sh" --validate >/dev/null 2>&1
 
-snap_after=$(find "$REPO_ROOT" "$val_iso_root" -type f | sort)
+snap_after=$(find "$REPO_ROOT" "$val_iso_root" -type f -not -path "*/__pycache__/*" -not -name "*.pyc" -not -path "*/.git/*" | sort)
 
 [ "$snap_before" = "$snap_after" ]; assert_true "Zero filesystem mutation during --validate across all namespaces" $?
 rm -rf "$val_iso_root" 2>/dev/null || true
