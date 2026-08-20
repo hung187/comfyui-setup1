@@ -1,0 +1,36 @@
+name: Quality Gate & Installer Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify:
+    name: Production Quality & Safety Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python Runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Verify Shell Scripts Syntax
+        run: |
+          bash -n install.sh install_nodes.sh install_models.sh fix_nodes.sh reload.sh scripts/*.sh tests/*.sh
+
+      - name: Run Production Adversarial Test Suite
+        run: |
+          bash tests/run_tests.sh
+
+      - name: Run Preflight Validation Gate (Read-Only Mode)
+        run: |
+          REQUIRED_SPACE_GB=1 bash install.sh --validate
+          REQUIRED_SPACE_GB=1 bash install_models.sh --validate
+          REQUIRED_SPACE_GB=1 bash install_nodes.sh --validate

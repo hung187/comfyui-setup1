@@ -135,6 +135,7 @@ Mở file **[`colab/comfyui_colab.ipynb`](colab/comfyui_colab.ipynb)** trên Goo
 
 | Tham Số | Mô Tả |
 |---|---|
+| `--validate` / `--preflight` | Kiểm tra toàn diện cấu hình & môi trường (READ-ONLY, không tải/cài) |
 | `--comfy-dir <PATH>` | Chỉ định thủ công thư mục ComfyUI |
 | `--civitai-token <TOKEN>` | Truyền token Civitai qua CLI (bỏ qua khung hỏi) |
 | `--only-nodes` | Chỉ cài ComfyUI + Custom Nodes |

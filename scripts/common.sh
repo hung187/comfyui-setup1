@@ -484,7 +484,7 @@ try:
         sys.exit(0)
 
     file_size = os.path.getsize(filepath)
-    if file_size < 100000:
+    if not expected_sha and file_size < 100000:
         print("0")
         sys.exit(0)
 
