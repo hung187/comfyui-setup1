@@ -300,31 +300,23 @@ G2_OK=1
 start_scenario "2.1: Truncated Safetensors Body Failing Offset Check"
 trunc_file="$TEST_ROOT/truncated.safetensors"
 curl -s "$MOCK_URL/truncated_offsets" -o "$trunc_file"
-if ! verify_model_file "$trunc_file"; then
-    assert_true "Truncated body rejected by offset validation" 0
-else
-    assert_true "Truncated body rejected" 1
-fi
+! verify_model_file "$trunc_file" >/dev/null 2>&1
+assert_true "Truncated body rejected by offset validation" $?
 [ $SCENARIO_OK -eq 0 ] && G2_OK=0
 end_scenario
 
 # Scenario 2.2: Expected SHA256 without sha256sum binary uses Python fallback
 start_scenario "2.2: Expected SHA256 Verified via Python Fallback"
-valid_file="$out1"
+valid_file="$TEST_ROOT/valid_for_hash.safetensors"
+curl -s "$MOCK_URL/valid_model.safetensors" -o "$valid_file"
 real_hash=$(python3 -c "import hashlib; print(hashlib.sha256(open('$valid_file','rb').read()).hexdigest())")
 fake_hash="0000000000000000000000000000000000000000000000000000000000000000"
 
-if verify_model_file "$valid_file" "$real_hash"; then
-    assert_true "Real hash accepted" 0
-else
-    assert_true "Real hash accepted" 1
-fi
+verify_model_file "$valid_file" "$real_hash" >/dev/null 2>&1
+assert_true "Real hash accepted" $?
 
-if ! verify_model_file "$valid_file" "$fake_hash"; then
-    assert_true "Wrong hash rejected" 0
-else
-    assert_true "Wrong hash rejected" 1
-fi
+! verify_model_file "$valid_file" "$fake_hash" >/dev/null 2>&1
+assert_true "Wrong hash rejected" $?
 [ $SCENARIO_OK -eq 0 ] && G2_OK=0
 end_scenario
 
@@ -515,7 +507,8 @@ end_scenario
 
 # Scenario 6.2: Primary Path Dangerous Guard
 start_scenario "6.2: Dangerous Root Path Safety Guards"
-resolve_comfy_base "/" >/dev/null 2>&1; assert_true "Root path guarded" 0
+guarded_res=$(resolve_comfy_base "/" 2>/dev/null)
+[ "$guarded_res" != "/" ] && [ "$guarded_res" = "$HOME/ComfyUI" ]; assert_true "Root path guarded and safely defaulted" $?
 [ $SCENARIO_OK -eq 0 ] && G6_OK=0
 end_scenario
 
