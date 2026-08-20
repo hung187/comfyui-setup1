@@ -459,7 +459,7 @@ log_event() {
 
 check_disk_space() {
     local avail_space_gb
-    avail_space_gb=$(df -BG "$COMFY_BASE" 2>/dev/null | awk 'NR==2 {print $4}' | sed 's/G//')
+    avail_space_gb=$(df -P -BG "$COMFY_BASE" 2>/dev/null | awk 'NR==2 {print $4}' | tr -dc '0-9')
     if [ -z "$avail_space_gb" ]; then
         echo -e "${YELLOW}⚠️  Không thể kiểm tra dung lượng ổ đĩa.${NC}"
         return 0

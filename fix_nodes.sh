@@ -3,7 +3,9 @@
 # SCRIPT TỰ ĐỘNG QUÉT VÀ SỬA LỖI CHO TẤT CẢ CUSTOM NODES CỦA COMFYUI
 # ================================================================================================================================
 
-set -euo pipefail
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    set -euo pipefail
+fi
 export LC_ALL=C
 
 # Import thư viện dùng chung nếu có

@@ -879,7 +879,7 @@ run_preflight() {
     # ── 6. Disk Space Check ──────────────────────────────────────────────────
     local target_disk_check="${COMFY_BASE:-.}"
     local disk_avail_gb
-    disk_avail_gb=$(df -BG "$target_disk_check" 2>/dev/null | awk 'NR==2 {print $4}' | sed 's/G//' || echo "999")
+    disk_avail_gb=$(df -P -BG "$target_disk_check" 2>/dev/null | awk 'NR==2 {print $4}' | tr -dc '0-9' || echo "999")
     if [ -n "$disk_avail_gb" ] && [ "$disk_avail_gb" -lt "${REQUIRED_SPACE_GB:-10}" ] 2>/dev/null; then
         check_disk="FAIL"; total_errors=$((total_errors + 1))
         err_messages+=("Available disk space (${disk_avail_gb}GB) is less than required (${REQUIRED_SPACE_GB:-10}GB)")

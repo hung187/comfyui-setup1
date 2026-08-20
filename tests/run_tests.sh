@@ -28,8 +28,10 @@ source "$REPO_ROOT/scripts/04_models_dl.sh"
 source "$REPO_ROOT/scripts/update_mirror_list.sh"
 source "$REPO_ROOT/fix_nodes.sh"
 
-# Ensure test runner does not inherit set -e from sourced scripts
+# Ensure test runner does not inherit set -e/u/pipefail from sourced scripts
 set +e
+set +u
+set +o pipefail 2>/dev/null || true
 
 echo "=================================================================="
 echo "🛡️  BẮT ĐẦU CHẠY ADVERSARIAL TEST SUITE TRỰC TIẾP TRÊN PRODUCTION CODE"

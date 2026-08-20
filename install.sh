@@ -54,9 +54,9 @@ show_server_info() {
 
     # Disk
     local disk_total disk_used disk_free
-    disk_total=$(df -BG / 2>/dev/null | awk 'NR==2 {print $2}' | sed 's/G//' || echo "N/A")
-    disk_used=$(df -BG / 2>/dev/null | awk 'NR==2 {print $3}' | sed 's/G//' || echo "N/A")
-    disk_free=$(df -BG / 2>/dev/null | awk 'NR==2 {print $4}' | sed 's/G//' || echo "N/A")
+    disk_total=$(df -P -BG / 2>/dev/null | awk 'NR==2 {print $2}' | tr -dc '0-9' || echo "N/A")
+    disk_used=$(df -P -BG / 2>/dev/null | awk 'NR==2 {print $3}' | tr -dc '0-9' || echo "N/A")
+    disk_free=$(df -P -BG / 2>/dev/null | awk 'NR==2 {print $4}' | tr -dc '0-9' || echo "N/A")
     if [ "$disk_free" != "N/A" ] && [ "$disk_free" -lt 20 ]; then
         echo -e "  ${CYAN}💾 Đĩa (/)     :${NC} ${RED}⚠️  Tổng ${disk_total}GB | Đã dùng ${disk_used}GB | TRỐNG CÒN ${disk_free}GB (NGUY HIỂM!)${NC}"
     else
