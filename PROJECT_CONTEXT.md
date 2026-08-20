@@ -27,7 +27,9 @@ install.sh (Entry point)
 8. **Third-Party Mirror Policy**: Các mirror bên thứ ba tự động chỉ được tải khi có SHA256 đi kèm.
 
 ## 4. Trạng Thái Release
-- **Git Commit**: `62f1f6b` — `harden installer validation and download recovery`
 - **Remote**: `git@github.com:hung187/comfyui-setup1.git` (branch `main`)
-- **Regression Tests**: 9/9 Groups PASS, 26/26 Scenarios PASS, 81/81 Assertions PASS.
+- **Remote CI**: GitHub Actions Quality Gate — **PASS (100% Success)**
+- **Regression Tests**: 9/9 Groups PASS, 29/29 Scenarios PASS, 89/89 Assertions PASS.
+- **SHA256 Authoritative Coverage**: 30/42 models verified via first-party metadata APIs (`docs/MODEL_HASH_PROVENANCE.md`).
+- **Effective Fallback Matrix**: `docs/MODEL_SOURCE_COVERAGE.md`.
 - **Preflight Mode**: `./install.sh --validate` (Read-only, zero filesystem mutations).
