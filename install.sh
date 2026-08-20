@@ -8,6 +8,10 @@ export START_TIME="${START_TIME:-$(date +%s)}"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'
 BLUE='\033[0;34m'; MAGENTA='\033[0;35m'; CYAN='\033[0;36m'; NC='\033[0m'
 
+# Source validation & common modules early
+source "$SCRIPT_DIR/scripts/validation.sh"
+source "$SCRIPT_DIR/scripts/common.sh"
+
 # ─── Kiểm tra thông tin chi tiết máy chủ ────────────────────────────────────
 show_server_info() {
     echo -e "\n${MAGENTA}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -27,7 +31,7 @@ show_server_info() {
     echo -e "  ${CYAN}⚡ CPU         :${NC} $cpu_model ($cpu_cores cores)"
 
     # RAM
-    local total_ram used_ram free_ram
+    local total_ram free_ram
     if [ -f /proc/meminfo ]; then
         total_ram=$(awk '/MemTotal/{printf "%.1f GB", $2/1024/1024}' /proc/meminfo)
         free_ram=$(awk '/MemAvailable/{printf "%.1f GB", $2/1024/1024}' /proc/meminfo)
@@ -75,7 +79,6 @@ show_server_info() {
 
 # ─── Nhập Civitai Token với khung đẹp & timeout 5 phút ─────────────────────
 prompt_civitai_token() {
-    # Nếu đã có token từ CLI (--civitai-token) thì bỏ qua hỏi
     if [ -n "${CIVITAI_TOKEN:-}" ]; then
         echo -e "  ${GREEN}✅ Civitai Token đã được truyền qua tham số CLI. Tiếp tục...${NC}"
         return 0
@@ -95,7 +98,6 @@ prompt_civitai_token() {
     local token_input=""
     local timeout_secs=300  # 5 phút
 
-    # Đọc token với timeout
     if read -r -t "$timeout_secs" -p "$(echo -e "  ${CYAN}👉 Nhập token: ${NC}")" token_input; then
         token_input="$(echo -n "$token_input" | xargs)"  # trim spaces
         if [ -z "$token_input" ]; then
@@ -106,7 +108,6 @@ prompt_civitai_token() {
         export CIVITAI_TOKEN="$token_input"
         echo -e "  ${GREEN}✅ Token đã lưu thành công! Bắt đầu chạy script...${NC}\n"
     else
-        # Timeout xảy ra
         echo -e "\n\n  ${RED}⏰ ĐÃ HẾT 5 PHÚT KHÔNG NHẬP TOKEN!${NC}"
         echo -e "  ${RED}   Script tự động đóng. Hãy chạy lại và nhập token kịp thời.${NC}\n"
         exit 1
@@ -118,26 +119,32 @@ show_help() {
     echo "Sử dụng: bash install.sh [tùy chọn]"
     echo ""
     echo "Tùy chọn:"
-    echo "  --comfy-dir <PATH>    Chỉ định trực tiếp thư mục cài đặt ComfyUI"
-    echo "  --civitai-token <TOK> Nhập API Token của Civitai"
-    echo "  --gdrive              Tự động lưu ảnh từ ComfyUI vào Google Drive"
-    echo "  --gdrive-folder <DIR> Tên thư mục trên Google Drive (mặc định: ComfyUI_Output)"
-    echo "  --only-nodes          Chỉ cài đặt ComfyUI + Custom Nodes (bỏ qua tải Models)"
-    echo "  --only-models         Chỉ tải Models (bỏ qua cài đặt Custom Nodes)"
-    echo "  --reload              Nạp nhanh Custom Nodes mới mà không đụng đến GPU"
-    echo "  --dry-run             Chế độ kiểm tra nhanh (không tải file nặng/torch)"
-    echo "  --no-ssl-verify       Bỏ qua kiểm tra chứng chỉ SSL"
-    echo "  --help                Hiển thị hướng dẫn này"
+    echo "  --validate / --preflight Chế độ kiểm tra toàn diện cấu hình & môi trường (READ-ONLY, không tải/cài)"
+    echo "  --comfy-dir <PATH>       Chỉ định trực tiếp thư mục cài đặt ComfyUI"
+    echo "  --civitai-token <TOK>    Nhập API Token của Civitai"
+    echo "  --gdrive                 Tự động lưu ảnh từ ComfyUI vào Google Drive"
+    echo "  --gdrive-folder <DIR>    Tên thư mục trên Google Drive (mặc định: ComfyUI_Output)"
+    echo "  --only-nodes             Chỉ cài đặt ComfyUI + Custom Nodes (bỏ qua tải Models)"
+    echo "  --only-models            Chỉ tải Models (bỏ qua cài đặt Custom Nodes)"
+    echo "  --reload                 Nạp nhanh Custom Nodes mới mà không đụng đến GPU"
+    echo "  --dry-run                Chế độ kiểm tra nhanh (không tải file nặng/torch)"
+    echo "  --no-ssl-verify          Bỏ qua kiểm tra chứng chỉ SSL"
+    echo "  --help                   Hiển thị hướng dẫn này"
     echo ""
 }
 
 # Parse CLI arguments
 DO_RELOAD=0
+DO_VALIDATE=0
 ONLY_NODES=0
 ONLY_MODELS=0
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --validate|--preflight)
+            DO_VALIDATE=1
+            shift
+            ;;
         --comfy-dir)
             export COMFY_BASE="$2"
             shift 2
@@ -184,13 +191,18 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [ "$DO_VALIDATE" -eq 1 ]; then
+    # Read-only validate mode (Zero filesystem mutation)
+    run_preflight "full" 1
+    exit $?
+fi
+
 if [ "$DO_RELOAD" -eq 1 ]; then
     chmod +x "$SCRIPT_DIR/reload.sh" 2>/dev/null || true
     exec "$SCRIPT_DIR/reload.sh"
     exit 0
 fi
 
-source "$SCRIPT_DIR/scripts/common.sh"
 source "$SCRIPT_DIR/scripts/01_env_setup.sh"
 source "$SCRIPT_DIR/scripts/02_comfy_core.sh"
 source "$SCRIPT_DIR/scripts/03_nodes_setup.sh"
@@ -200,10 +212,17 @@ source "$SCRIPT_DIR/scripts/06_gdrive_sync.sh"
 
 main() {
     show_server_info
+
+    # Run Preflight Safety Gate before any operation
+    if ! run_preflight "full" 0; then
+        echo -e "${RED}❌ Preflight Safety Gate phát hiện lỗi cấu hình. Dừng cài đặt để bảo vệ hệ thống.${NC}"
+        return 1
+    fi
+
     prompt_civitai_token
 
     run_stage_01 "$@" || return 1
-    
+
     if [ "$ONLY_MODELS" -eq 1 ]; then
         run_stage_04 "$@" || return 1
         run_stage_05 "$@" || return 1

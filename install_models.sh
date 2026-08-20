@@ -9,20 +9,30 @@ set +e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export START_TIME="${START_TIME:-$(date +%s)}"
 
+source "$SCRIPT_DIR/scripts/validation.sh"
+source "$SCRIPT_DIR/scripts/common.sh"
+
 show_help() {
     echo "Sử dụng: bash install_models.sh [tùy chọn]"
     echo ""
     echo "Tùy chọn:"
-    echo "  --comfy-dir <PATH>    Chỉ định trực tiếp thư mục cài đặt ComfyUI"
-    echo "  --civitai-token <TOK> Nhập API Token của Civitai"
-    echo "  --dry-run             Chế độ kiểm tra nhanh"
-    echo "  --no-ssl-verify       Bỏ qua kiểm tra chứng chỉ SSL"
-    echo "  --help                Hiển thị hướng dẫn này"
+    echo "  --validate / --preflight Chế độ kiểm tra toàn diện cấu hình (READ-ONLY)"
+    echo "  --comfy-dir <PATH>       Chỉ định trực tiếp thư mục cài đặt ComfyUI"
+    echo "  --civitai-token <TOK>    Nhập API Token của Civitai"
+    echo "  --dry-run                Chế độ kiểm tra nhanh"
+    echo "  --no-ssl-verify          Bỏ qua kiểm tra chứng chỉ SSL"
+    echo "  --help                   Hiển thị hướng dẫn này"
     echo ""
 }
 
+DO_VALIDATE=0
+
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --validate|--preflight)
+            DO_VALIDATE=1
+            shift
+            ;;
         --comfy-dir)
             export COMFY_BASE="$2"
             shift 2
@@ -49,7 +59,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-source "$SCRIPT_DIR/scripts/common.sh"
+if [ "$DO_VALIDATE" -eq 1 ]; then
+    run_preflight "models" 1
+    exit $?
+fi
+
 source "$SCRIPT_DIR/scripts/01_env_setup.sh"
 source "$SCRIPT_DIR/scripts/04_models_dl.sh"
 source "$SCRIPT_DIR/scripts/05_manifest.sh"
@@ -58,6 +72,11 @@ main_models() {
     echo -e "${MAGENTA}====================================================${NC}"
     echo -e "${MAGENTA}🚀 TẢI MODELS CHO COMFYUI (MULTI-MIRROR FALLBACK)   ${NC}"
     echo -e "${MAGENTA}====================================================${NC}"
+
+    if ! run_preflight "models" 0; then
+        echo -e "${RED}❌ Preflight Safety Gate phát hiện lỗi cấu hình models.${NC}"
+        return 1
+    fi
 
     run_stage_01 "$@" || return 1
     run_stage_04 "$@" || return 1

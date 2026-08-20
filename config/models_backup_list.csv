@@ -1,61 +1,63 @@
 # ================================================================================================================================
-# TỆP RIÊNG BIỆT CHỨA DỰ PHÒNG LINK PHỤ 1, LINK PHỤ 2, LINK PHỤ 3 CHO TỪNG MODEL
-# Nguồn tải đa dạng: HuggingFace, HuggingFace Asian Mirror, GitHub Releases, GHProxy, Civitai Red
+# TỆP RIÊNG BIỆT CHỨA DỰ PHÒNG LINK PHỤ FOR MODEL DOWNLOADS
+# Nguồn tải: HuggingFace, HuggingFace Asian Mirror (hf-mirror.com), GitHub Releases, GHProxy, Civitai API Fallback
+# KHÔNG sử dụng civitai.red (bị lỗi timeout / 403 / 307)
 # ================================================================================================================================
 
 # --- CHECKPOINTS (IL) ---
-$MODELS/checkpoints/IL/oneObsession_v23.safetensors|https://civitai.red/api/download/models/3118448?fileId=2998810&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/3118448?fileId=2998810|
-$MODELS/checkpoints/IL/illustriousXL20_v20.safetensors|https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0/resolve/main/Illustrious-XL-v2.0.safetensors|https://hf-mirror.com/OnomaAIResearch/Illustrious-XL-v2.0/resolve/main/Illustrious-XL-v2.0.safetensors|https://civitai.red/api/download/models/1546777?fileId=1446530&token=$ENCODED_TOKEN
-$MODELS/checkpoints/IL/ultimateHentaiAnimeRXTRexAnime_rxV1.safetensors|https://civitai.red/api/download/models/1828803?fileId=1729137&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1828803?fileId=1729137|
-$MODELS/checkpoints/IL/waiIllustriousSDXL_v170.safetensors|https://civitai.red/api/download/models/2883731?fileId=2763986&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2883731?fileId=2763986|
+$MODELS/checkpoints/IL/oneObsession_v23.safetensors|https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0/resolve/main/Illustrious-XL-v2.0.safetensors|https://hf-mirror.com/OnomaAIResearch/Illustrious-XL-v2.0/resolve/main/Illustrious-XL-v2.0.safetensors|
+$MODELS/checkpoints/IL/illustriousXL20_v20.safetensors|https://huggingface.co/OnomaAIResearch/Illustrious-XL-v2.0/resolve/main/Illustrious-XL-v2.0.safetensors|https://hf-mirror.com/OnomaAIResearch/Illustrious-XL-v2.0/resolve/main/Illustrious-XL-v2.0.safetensors|
+$MODELS/checkpoints/IL/ultimateHentaiAnimeRXTRexAnime_rxV1.safetensors|https://civitai.com/api/download/models/1828803?fileId=1729137&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1828803?fileId=1729137|
+$MODELS/checkpoints/IL/waiIllustriousSDXL_v170.safetensors|https://civitai.com/api/download/models/2883731?fileId=2763986&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2883731?fileId=2763986|
 
 # --- CONTROLNET ---
 $MODELS/controlnet/controlnet_openpose_xl.safetensors|https://hf-mirror.com/lllyasviel/sd_control_collection/resolve/main/thibaud_xl_openpose.safetensors|https://huggingface.co/thibaud/controlnet-openpose-sdxl-1.0/resolve/main/OpenPoseXL2.safetensors?download=true|https://hf.co/lllyasviel/sd_control_collection/resolve/main/thibaud_xl_openpose.safetensors
-$MODELS/controlnet/illustriousXLCanny_v10.safetensors|https://civitai.red/api/download/models/1053985?fileId=959944&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1053985?fileId=959944|
+$MODELS/controlnet/illustriousXLCanny_v10.safetensors|https://civitai.com/api/download/models/1053985?fileId=959944&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1053985?fileId=959944|
 
 # --- IP-ADAPTER & CLIP VISION ---
 $MODELS/ipadapter/ip-adapter_sdxl_vit-h.safetensors|https://hf-mirror.com/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter_sdxl_vit-h.safetensors|https://hf.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter_sdxl_vit-h.safetensors|
 $MODELS/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors|https://hf-mirror.com/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors|https://hf.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors|
 $MODELS/clip_vision/dino_v3_vit_l.safetensors|https://hf-mirror.com/Comfy-Org/TRELLIS.2/resolve/main/clip_vision/dino_v3_vit_l.safetensors?download=true|https://hf.co/Comfy-Org/TRELLIS.2/resolve/main/clip_vision/dino_v3_vit_l.safetensors?download=true|
+
 # --- INSIGHTFACE & FACE RESTORE ---
 $MODELS/insightface/inswapper_128.onnx|https://huggingface.co/Gourieff/ReActor/resolve/main/models/insightface/inswapper_128.onnx|https://hf-mirror.com/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx|https://hf.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx
 $MODELS/facerestore/codeformer-v0.1.0.pth|https://huggingface.co/sczhou/CodeFormer/resolve/main/codeformer.pth|https://ghproxy.net/https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth|https://gh-proxy.com/https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth
 $MODELS/facexlib/detection_Resnet50_Final.pth|https://ghproxy.net/https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth|https://gh-proxy.com/https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth|
 
 # --- VAE ---
-$MODELS/vae/ponyStandardVAE_v10.safetensors|https://civitai.red/api/download/models/785437?fileId=698889&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/785437?fileId=698889|
+$MODELS/vae/ponyStandardVAE_v10.safetensors|https://civitai.com/api/download/models/785437?fileId=698889&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/785437?fileId=698889|
 $MODELS/vae/trellis_2_shape_vae_bf16.safetensors|https://hf-mirror.com/Comfy-Org/TRELLIS.2/resolve/main/vae/trellis_2_shape_vae_bf16.safetensors?download=true|https://hf.co/Comfy-Org/TRELLIS.2/resolve/main/vae/trellis_2_shape_vae_bf16.safetensors?download=true|
 $MODELS/vae/trellis_2_texture_vae_bf16.safetensors|https://hf-mirror.com/Comfy-Org/TRELLIS.2/resolve/main/vae/trellis_2_texture_vae_bf16.safetensors?download=true|https://hf.co/Comfy-Org/TRELLIS.2/resolve/main/vae/trellis_2_texture_vae_bf16.safetensors?download=true|
 
 # --- UPSCALE & DIFFUSION ---
-$MODELS/upscale_models/4xUltrasharp_4xUltrasharpV10.pt|https://huggingface.co/loksyn/4x-UltraSharp/resolve/main/4x-UltraSharp.pth|https://hf-mirror.com/loksyn/4x-UltraSharp/resolve/main/4x-UltraSharp.pth|https://civitai.red/api/download/models/125843?fileId=90900&token=$ENCODED_TOKEN
+$MODELS/upscale_models/4xUltrasharp_4xUltrasharpV10.pt|https://huggingface.co/loksyn/4x-UltraSharp/resolve/main/4x-UltraSharp.pth|https://hf-mirror.com/loksyn/4x-UltraSharp/resolve/main/4x-UltraSharp.pth|
 $MODELS/upscale_models/4xFaceUpDAT.safetensors|https://hf-mirror.com/Phips/4xFaceUpDAT/resolve/main/4xFaceUpDAT.safetensors?download=true|https://hf.co/Phips/4xFaceUpDAT/resolve/main/4xFaceUpDAT.safetensors?download=true|
 $MODELS/diffusion_models/trellis_2_bf16.safetensors|https://hf-mirror.com/Comfy-Org/TRELLIS.2/resolve/main/diffusion_models/trellis_2_bf16.safetensors?download=true|https://hf.co/Comfy-Org/TRELLIS.2/resolve/main/diffusion_models/trellis_2_bf16.safetensors?download=true|
 
 # --- LORAS (QUALITY & FACE & HANDS) ---
-$MODELS/loras/Quality/Add_more_details_pony.safetensors|https://civitai.red/api/download/models/927531?fileId=835078&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/927531?fileId=835078|
-$MODELS/loras/Quality/add-detail-xl.safetensors|https://civitai.red/api/download/models/135867?fileId=99264&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/135867?fileId=99264|
-$MODELS/loras/Quality/illustrious_masterpieces_v3.safetensors|https://civitai.red/api/download/models/2247497?fileId=2139998&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2247497?fileId=2139998|
-$MODELS/loras/Quality/AddMicroDetails_Illustrious_v6.safetensors|https://civitai.red/api/download/models/2832991?fileId=2719141&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2832991?fileId=2719141|
-$MODELS/loras/Face/bieu_cam-betterahegao.safetensors|https://civitai.red/api/download/models/1616431?fileId=1516402&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1616431?fileId=1516402|
-$MODELS/loras/Face/bieu_cam-toro_ahe_pony.safetensors|https://civitai.red/api/download/models/338805?fileId=269045&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/338805?fileId=269045|
-$MODELS/loras/Hands/pony_good_hands.safetensors|https://civitai.red/api/download/models/501402?fileId=419041&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/501402?fileId=419041|
+$MODELS/loras/Quality/Add_more_details_pony.safetensors|https://civitai.com/api/download/models/927531?fileId=835078&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/927531?fileId=835078|
+$MODELS/loras/Quality/add-detail-xl.safetensors|https://civitai.com/api/download/models/135867?fileId=99264&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/135867?fileId=99264|
+$MODELS/loras/Quality/illustrious_masterpieces_v3.safetensors|https://civitai.com/api/download/models/2247497?fileId=2139998&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2247497?fileId=2139998|
+$MODELS/loras/Quality/AddMicroDetails_Illustrious_v6.safetensors|https://civitai.com/api/download/models/2832991?fileId=2719141&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2832991?fileId=2719141|
+$MODELS/loras/Face/bieu_cam-betterahegao.safetensors|https://civitai.com/api/download/models/1616431?fileId=1516402&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1616431?fileId=1516402|
+$MODELS/loras/Face/bieu_cam-toro_ahe_pony.safetensors|https://civitai.com/api/download/models/338805?fileId=269045&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/338805?fileId=269045|
+$MODELS/loras/Hands/pony_good_hands.safetensors|https://civitai.com/api/download/models/501402?fileId=419041&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/501402?fileId=419041|
 
 # --- LORAS (CHARACTER & STYLE & POSE) ---
-$MODELS/loras/Character/c1_fleurdelys_cartethyia_ilv1.0_xl-3ep.safetensors|https://civitai.red/api/download/models/1899025?fileId=1798294&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1899025?fileId=1798294|
-$MODELS/loras/Character/Chen_Qianyu_-_Arknights_Endfield_-_Illustrious.safetensors|https://civitai.red/api/download/models/2620727?fileId=2508481&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2620727?fileId=2508481|
-$MODELS/loras/Character/qingxiaoV1.safetensors|https://civitai.red/api/download/models/3036705?fileId=2915596&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/3036705?fileId=2915596|
-$MODELS/loras/Style/illmikoyan_style_v2_illustrious_epoch_7.safetensors|https://civitai.red/api/download/models/1262594?fileId=1167679&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1262594?fileId=1167679|
-$MODELS/loras/Style/ATRex_style-12V2Rev.safetensors|https://civitai.red/api/download/models/1804885?fileId=1705538&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1804885?fileId=1705538|
-$MODELS/loras/Style/Phong_Cach_HEN-GEN_illust_0.2v.safetensors|https://civitai.red/api/download/models/1099179?fileId=1004194&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1099179?fileId=1004194|
-$MODELS/loras/Style/Phong_Cach_HEN-CMN_Pony_0.1v.safetensors|https://civitai.red/api/download/models/1122647?fileId=1027452&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1122647?fileId=1027452|
-$MODELS/loras/Style/FComic_1to1000_Pony_V1.safetensors|https://civitai.red/api/download/models/653473?fileId=568447&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/653473?fileId=568447|
-$MODELS/loras/Style/FComic_1to1000_IL_V2.safetensors|https://civitai.red/api/download/models/2166652?fileId=2059833&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2166652?fileId=2059833|
-$MODELS/loras/Style/Phong_Cach-Anime_Style_1to1000_Pony_V1.safetensors|https://civitai.red/api/download/models/112806?fileId=80029&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/112806?fileId=80029|
-$MODELS/loras/Style/Phong_Cach-HPI2_Anime_IL_V1.safetensors|https://civitai.red/api/download/models/2113370?fileId=2007894&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2113370?fileId=2007894|
-$MODELS/loras/Effect/da_bong+mo_hoi-V4_Glossy_Skin.safetensors|https://civitai.red/api/download/models/1467892?fileId=1369208&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1467892?fileId=1369208|
-$MODELS/loras/Effect/da_bong-shiny_wet_skin_v2.safetensors|https://civitai.red/api/download/models/2110221?fileId=2004903&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2110221?fileId=2004903|
-$MODELS/loras/Pose/NSFW-22-H-e8.safetensors|https://civitai.red/api/download/models/2073605?fileId=1969798&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2073605?fileId=1969798|
-$MODELS/loras/Pose/Midis_Defeat2_IL.safetensors|https://civitai.red/api/download/models/1058897?fileId=964472&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1058897?fileId=964472|
-$MODELS/loras/Pose/Fumihiko_Defeat_PONY.safetensors|https://civitai.red/api/download/models/936014?fileId=843344&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/936014?fileId=843344|
-$MODELS/loras/Pose/phong_cach-hands-free_blowjob-IL.safetensors|https://civitai.red/api/download/models/2196580?fileId=2094818&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2196580?fileId=2094818|
+$MODELS/loras/Character/c1_fleurdelys_cartethyia_ilv1.0_xl-3ep.safetensors|https://civitai.com/api/download/models/1899025?fileId=1798294&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1899025?fileId=1798294|
+$MODELS/loras/Character/Chen_Qianyu_-_Arknights_Endfield_-_Illustrious.safetensors|https://civitai.com/api/download/models/2620727?fileId=2508481&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2620727?fileId=2508481|
+$MODELS/loras/Character/qingxiaoV1.safetensors|https://civitai.com/api/download/models/3036705?fileId=2915596&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/3036705?fileId=2915596|
+$MODELS/loras/Style/illmikoyan_style_v2_illustrious_epoch_7.safetensors|https://civitai.com/api/download/models/1262594?fileId=1167679&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1262594?fileId=1167679|
+$MODELS/loras/Style/ATRex_style-12V2Rev.safetensors|https://civitai.com/api/download/models/1804885?fileId=1705538&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1804885?fileId=1705538|
+$MODELS/loras/Style/Phong_Cach_HEN-GEN_illust_0.2v.safetensors|https://civitai.com/api/download/models/1099179?fileId=1004194&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1099179?fileId=1004194|
+$MODELS/loras/Style/Phong_Cach_HEN-CMN_Pony_0.1v.safetensors|https://civitai.com/api/download/models/1122647?fileId=1027452&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1122647?fileId=1027452|
+$MODELS/loras/Style/FComic_1to1000_Pony_V1.safetensors|https://civitai.com/api/download/models/653473?fileId=568447&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/653473?fileId=568447|
+$MODELS/loras/Style/FComic_1to1000_IL_V2.safetensors|https://civitai.com/api/download/models/2166652?fileId=2059833&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2166652?fileId=2059833|
+$MODELS/loras/Style/Phong_Cach-Anime_Style_1to1000_Pony_V1.safetensors|https://civitai.com/api/download/models/112806?fileId=80029&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/112806?fileId=80029|
+$MODELS/loras/Style/Phong_Cach-HPI2_Anime_IL_V1.safetensors|https://civitai.com/api/download/models/2113370?fileId=2007894&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2113370?fileId=2007894|
+$MODELS/loras/Effect/da_bong+mo_hoi-V4_Glossy_Skin.safetensors|https://civitai.com/api/download/models/1467892?fileId=1369208&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1467892?fileId=1369208|
+$MODELS/loras/Effect/da_bong-shiny_wet_skin_v2.safetensors|https://civitai.com/api/download/models/2110221?fileId=2004903&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2110221?fileId=2004903|
+$MODELS/loras/Pose/NSFW-22-H-e8.safetensors|https://civitai.com/api/download/models/2073605?fileId=1969798&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2073605?fileId=1969798|
+$MODELS/loras/Pose/Midis_Defeat2_IL.safetensors|https://civitai.com/api/download/models/1058897?fileId=964472&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1058897?fileId=964472|
+$MODELS/loras/Pose/Fumihiko_Defeat_PONY.safetensors|https://civitai.com/api/download/models/936014?fileId=843344&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/936014?fileId=843344|
+$MODELS/loras/Pose/phong_cach-hands-free_blowjob-IL.safetensors|https://civitai.com/api/download/models/2196580?fileId=2094818&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2196580?fileId=2094818|

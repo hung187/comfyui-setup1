@@ -9,19 +9,29 @@ set +e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export START_TIME="${START_TIME:-$(date +%s)}"
 
+source "$SCRIPT_DIR/scripts/validation.sh"
+source "$SCRIPT_DIR/scripts/common.sh"
+
 show_help() {
     echo "Sử dụng: bash install_nodes.sh [tùy chọn]"
     echo ""
     echo "Tùy chọn:"
-    echo "  --comfy-dir <PATH>    Chỉ định trực tiếp thư mục cài đặt ComfyUI"
-    echo "  --gdrive              Tự động lưu ảnh từ ComfyUI vào Google Drive"
-    echo "  --no-ssl-verify       Bỏ qua kiểm tra chứng chỉ SSL"
-    echo "  --help                Hiển thị hướng dẫn này"
+    echo "  --validate / --preflight Chế độ kiểm tra toàn diện cấu hình (READ-ONLY)"
+    echo "  --comfy-dir <PATH>       Chỉ định trực tiếp thư mục cài đặt ComfyUI"
+    echo "  --gdrive                 Tự động lưu ảnh từ ComfyUI vào Google Drive"
+    echo "  --no-ssl-verify          Bỏ qua kiểm tra chứng chỉ SSL"
+    echo "  --help                   Hiển thị hướng dẫn này"
     echo ""
 }
 
+DO_VALIDATE=0
+
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --validate|--preflight)
+            DO_VALIDATE=1
+            shift
+            ;;
         --comfy-dir)
             export COMFY_BASE="$2"
             shift 2
@@ -44,7 +54,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-source "$SCRIPT_DIR/scripts/common.sh"
+if [ "$DO_VALIDATE" -eq 1 ]; then
+    run_preflight "nodes" 1
+    exit $?
+fi
+
 source "$SCRIPT_DIR/scripts/01_env_setup.sh"
 source "$SCRIPT_DIR/scripts/02_comfy_core.sh"
 source "$SCRIPT_DIR/scripts/03_nodes_setup.sh"
@@ -55,6 +69,11 @@ main_nodes() {
     echo -e "${GREEN}====================================================${NC}"
     echo -e "${GREEN}🚀 CÀI ĐẶT COMFYUI + CÁC CUSTOM NODES (AN TOÀN ĐĨA) ${NC}"
     echo -e "${GREEN}====================================================${NC}"
+
+    if ! run_preflight "nodes" 0; then
+        echo -e "${RED}❌ Preflight Safety Gate phát hiện lỗi cấu hình nodes.${NC}"
+        return 1
+    fi
 
     run_stage_01 "$@" || return 1
     run_stage_02 "$@" || return 1

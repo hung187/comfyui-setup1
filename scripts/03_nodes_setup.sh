@@ -14,6 +14,12 @@ run_stage_03() {
         return 1
     fi
 
+    # Run node configuration validation
+    if ! validate_nodes_config "$config_file" "$CUSTOM_NODES" 2>/dev/null; then
+        echo -e "${RED}❌ File cấu hình nodes_list.txt không hợp lệ hoặc có lỗi bảo mật!${NC}"
+        return 1
+    fi
+
     local node_ok=0 node_fail=0 node_total=0
 
     while IFS= read -r line; do
@@ -30,6 +36,13 @@ run_stage_03() {
         fi
         if [ -z "$desc" ]; then
             desc="$(basename "$url" .git)"
+        fi
+
+        # Pre-check containment and URL
+        if ! validate_node_destination "$path" "$CUSTOM_NODES" 2>/dev/null || ! validate_url "$url" 2>/dev/null; then
+            echo -e "${RED}❌ Bỏ qua node có đường dẫn hoặc URL không hợp lệ: $desc${NC}"
+            node_fail=$((node_fail + 1))
+            continue
         fi
 
         node_total=$((node_total + 1))

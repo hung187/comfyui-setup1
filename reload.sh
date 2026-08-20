@@ -71,7 +71,7 @@ if [ -d "$COMFY_DIR" ] && [ -f "$COMFY_DIR/main.py" ]; then
 
     echo -e "\033[0;34m🚀 Đang khởi động lại ComfyUI & Nạp toàn bộ Custom Nodes...\033[0m"
     $PYTHON_BIN main.py --listen 0.0.0.0 --port 8188 --enable-cors-header > "$LOG_FILE" 2>&1 &
-    
+
     # 2. Wait and verify readiness at port 8188
     READY=0
     for i in {1..30}; do

@@ -5,11 +5,11 @@ run_stage_05() {
 
     END_TIME=$(date +%s)
     ELAPSED_SEC=$((END_TIME - START_TIME))
-    
+
     local hours=$((ELAPSED_SEC / 3600))
     local minutes=$(( (ELAPSED_SEC % 3600) / 60 ))
     local seconds=$((ELAPSED_SEC % 60))
-    
+
     local time_str=""
     [ $hours -gt 0 ] && time_str="${hours}h "
     time_str="${time_str}${minutes}m ${seconds}s"

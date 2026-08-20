@@ -7,8 +7,16 @@
 *.gguf
 *.onnx
 *.tar
+*.tar.gz
 *.zip
 *.7z
+*.part
+*.meta.json
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
 
 # Ignore ComfyUI installation & output directories if created inside workspace
 ComfyUI/
@@ -17,18 +25,26 @@ output/
 downloads/
 models/
 custom_nodes/
+preserve_quarantine/
 
 # Ignore logs & temporary files
 *.log
 *.tmp
 *.bak
+*.bak_*
+*.lock
 pip_install.log
 setup_log*.txt
 manifest.json
 SETUP_REPORT.md
 setup_report.json
+source_health.json
+download_state.json
+preflight_report.json
 
-# Python cache
+# Python cache & IDE
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+.pytest_cache/
+.coverage
