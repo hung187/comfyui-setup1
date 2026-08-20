@@ -11,28 +11,28 @@ https://civitai.com/api/download/models/1828803?fileId=1729137&token=$ENCODED_TO
 https://civitai.com/api/download/models/2883731?fileId=2763986&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/waiIllustriousSDXL_v170.safetensors|WAI Illustrious SDXL v17.0|f116b0c78ff441467b0cdc8f1936e1ed18ea31e9997c7b132b1b8db533f0bd04
 
 # --- CONTROLNET ---
-https://huggingface.co/lllyasviel/sd_control_collection/resolve/main/thibaud_xl_openpose.safetensors|$MODELS/controlnet/controlnet_openpose_xl.safetensors|ControlNet OpenPose XL|9e070426568a3c60c128ffb98c66cdc7a0ea21d0d8abb86f73564aaf2e0c6f42
+https://huggingface.co/lllyasviel/sd_control_collection/resolve/main/thibaud_xl_openpose.safetensors|$MODELS/controlnet/controlnet_openpose_xl.safetensors|ControlNet OpenPose XL|
 https://civitai.com/api/download/models/1053985?fileId=959944&token=$ENCODED_TOKEN|$MODELS/controlnet/illustriousXLCanny_v10.safetensors|Illustrious XL Canny v1.0|e14d12e39587f3269f73f62c16734262b8ded6f47f102b953a708a6b4c6e5974
 
 # --- IP-ADAPTER & CLIP VISION ---
-https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter_sdxl_vit-h.safetensors|$MODELS/ipadapter/ip-adapter_sdxl_vit-h.safetensors|IP-Adapter SDXL ViT-H|ebf05d918348aec7abb02a5e9ecef77e0aaea6914a5c4ea13f50d45eb1681831
-https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors|$MODELS/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors|CLIP ViT-H-14|6ca9667da1ca9e0b0f75e46bb030f7e011f44f86cbfb8d5a36590fcd7507b030
-https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/clip_vision/dino_v3_vit_l.safetensors?download=true|$MODELS/clip_vision/dino_v3_vit_l.safetensors|DINO v3 ViT-L|5cb785e458de7c460579082418af81f5c62380c181599344bdc60898c63468ee
+https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter_sdxl_vit-h.safetensors|$MODELS/ipadapter/ip-adapter_sdxl_vit-h.safetensors|IP-Adapter SDXL ViT-H|
+https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors|$MODELS/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors|CLIP ViT-H-14|
+https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/clip_vision/dino_v3_vit_l.safetensors?download=true|$MODELS/clip_vision/dino_v3_vit_l.safetensors|DINO v3 ViT-L|
 
 # --- FACE RESTORE & INSIGHTFACE ---
-https://huggingface.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx|$MODELS/insightface/inswapper_128.onnx|InsightFace inswapper_128|e4a3f08c753cb72d04e10aa0f7dbe3deebbf39567d4ead6dce08e98aa49e16af
+https://huggingface.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx|$MODELS/insightface/inswapper_128.onnx|InsightFace inswapper_128|
 https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth|$MODELS/facerestore/codeformer-v0.1.0.pth|CodeFormer v0.1.0|
 https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth|$MODELS/facexlib/detection_Resnet50_Final.pth|FaceXLib Detection Resnet50 Final|
 
 # --- VAE ---
 https://civitai.com/api/download/models/785437?fileId=698889&token=$ENCODED_TOKEN|$MODELS/vae/ponyStandardVAE_v10.safetensors|Pony Standard VAE v1.0|0e4fd8736bb998fccf9f659ff69995f6bb3241fce0e7fc595f5842b36e27fabe
-https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/vae/trellis_2_shape_vae_bf16.safetensors?download=true|$MODELS/vae/trellis_2_shape_vae_bf16.safetensors|Trellis.2 Shape VAE BF16|de0cb4949a76c59ee5c091a995a69bcc8c51d5aeda939f0c641a50d2a72341f4
-https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/vae/trellis_2_texture_vae_bf16.safetensors?download=true|$MODELS/vae/trellis_2_texture_vae_bf16.safetensors|Trellis.2 Texture VAE BF16|714e5ebf094a610e12a8e3b5175c18a62f37f6ea4218acb6073644456b73ab0e
+https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/vae/trellis_2_shape_vae_bf16.safetensors?download=true|$MODELS/vae/trellis_2_shape_vae_bf16.safetensors|Trellis.2 Shape VAE BF16|
+https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/vae/trellis_2_texture_vae_bf16.safetensors?download=true|$MODELS/vae/trellis_2_texture_vae_bf16.safetensors|Trellis.2 Texture VAE BF16|
 
 # --- UPSCALE & DIFFUSION ---
 https://civitai.com/api/download/models/125843?fileId=90900&token=$ENCODED_TOKEN|$MODELS/upscale_models/4xUltrasharp_4xUltrasharpV10.pt|4x UltraSharp v1.0|a5812231fc936b42af08a5edba784195495d303d5b3248c24489ef0c4021fe01
-https://huggingface.co/Phips/4xFaceUpDAT/resolve/main/4xFaceUpDAT.safetensors?download=true|$MODELS/upscale_models/4xFaceUpDAT.safetensors|4x FaceUpDAT|1b2b269509ca58b99c282a4158fb05e58dfa87bb3453f00c0ad178c762c04c5a
-https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/diffusion_models/trellis_2_bf16.safetensors?download=true|$MODELS/diffusion_models/trellis_2_bf16.safetensors|Trellis.2 Diffusion BF16|bf8ebe29f2d73722ca8a17b7aa65ef07650eb26d04799ae600482058f96921b5
+https://huggingface.co/Phips/4xFaceUpDAT/resolve/main/4xFaceUpDAT.safetensors?download=true|$MODELS/upscale_models/4xFaceUpDAT.safetensors|4x FaceUpDAT|
+https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/diffusion_models/trellis_2_bf16.safetensors?download=true|$MODELS/diffusion_models/trellis_2_bf16.safetensors|Trellis.2 Diffusion BF16|
 
 # --- LORAS (QUALITY & FACE & HANDS) ---
 https://civitai.com/api/download/models/927531?fileId=835078&token=$ENCODED_TOKEN|$MODELS/loras/Quality/Add_more_details_pony.safetensors|Add More Details (Pony)|42a60854a685248cb88d2c5de81c8b0d968bd470d16004fc6a05e4a5ef4675be

@@ -263,15 +263,21 @@ resolve_comfy_base() {
 
     # Fallback to system-wide search if no standard path had main.py
     if [ ${#existing_dirs[@]} -eq 0 ]; then
-        while IFS= read -r found_main; do
-            if [ -n "$found_main" ]; then
-                local found_dir
-                found_dir=$(dirname "$found_main")
-                local real_p
-                real_p=$(readlink -f "$found_dir" 2>/dev/null || echo "$found_dir")
-                existing_dirs+=("$real_p")
-            fi
-        done < <(find /app /workspace /content /root /opt "$HOME" -maxdepth 3 -name "main.py" 2>/dev/null | head -n 5)
+        local search_dirs=()
+        for d in /app /workspace /content /root /opt "$HOME"; do
+            [ -d "$d" ] && [ -r "$d" ] && search_dirs+=("$d")
+        done
+        if [ ${#search_dirs[@]} -gt 0 ]; then
+            while IFS= read -r found_main; do
+                if [ -n "$found_main" ]; then
+                    local found_dir
+                    found_dir=$(dirname "$found_main")
+                    local real_p
+                    real_p=$(readlink -f "$found_dir" 2>/dev/null || echo "$found_dir")
+                    existing_dirs+=("$real_p")
+                fi
+            done < <(find "${search_dirs[@]}" -maxdepth 3 -name "main.py" 2>/dev/null | head -n 5)
+        fi
     fi
 
     # 2. Pick primary target directory
@@ -453,11 +459,11 @@ log_event() {
 
 check_disk_space() {
     local avail_space_gb
-    avail_space_gb=$(df -BG -P "$COMFY_BASE" 2>/dev/null | awk 'NR==2 {print $4}' | tr -d 'G')
+    avail_space_gb=$(df -BG "$COMFY_BASE" 2>/dev/null | awk 'NR==2 {print $4}' | sed 's/G//')
     if [ -z "$avail_space_gb" ]; then
         echo -e "${YELLOW}⚠️  Không thể kiểm tra dung lượng ổ đĩa.${NC}"
         return 0
-    elif [ "$avail_space_gb" -lt "${REQUIRED_SPACE_GB:-10}" ]; then
+    elif [ "$avail_space_gb" -lt "$REQUIRED_SPACE_GB" ]; then
         echo -e "${RED}❌ Dung lượng đĩa còn quá ít: ${avail_space_gb}GB, nhỏ hơn ngưỡng tối thiểu ${REQUIRED_SPACE_GB}GB. Tạm dừng để tránh tràn đĩa.${NC}"
         log_event "DISK_LOW" "Space: ${avail_space_gb}GB < ${REQUIRED_SPACE_GB}GB"
         return 1
@@ -506,15 +512,10 @@ try:
         print("0")
         sys.exit(0)
 
-    # 2. Text file / Shell script rejection (Shebang or non-binary plain text)
-    if head.startswith(b'#!/') or head.startswith(b'# ---') or head.startswith(b'/*') or head.startswith(b'//'):
-        print("0")
-        sys.exit(0)
-
     is_safetensors = filepath.endswith('.safetensors') or filepath.endswith('.safetensors.part')
 
-    # 3. Safetensors validation: uint64 header size + JSON parse + Tensor Offset Body Boundary Check
-    if is_safetensors or len(head) >= 8:
+    # 2. Safetensors validation: uint64 header size + JSON parse + Tensor Offset Body Boundary Check
+    if is_safetensors or (len(head) >= 8 and not head.startswith(b'PK') and not head.startswith(b'GGUF')):
         header_len = int.from_bytes(head[:8], 'little')
         if 0 < header_len < 100000000 and (8 + header_len) <= file_size:
             with open(filepath, 'rb') as f:
@@ -522,9 +523,10 @@ try:
                 json_bytes = f.read(header_len)
                 try:
                     meta = json.loads(json_bytes.decode('utf-8'))
-                    if isinstance(meta, dict):
+                    if isinstance(meta, dict) and len(meta) > 0:
+                        # Strict validation of tensor offsets against actual file size
                         body_start = 8 + header_len
-                        valid_tensors_found = 0
+                        has_tensors = False
                         for k, v in meta.items():
                             if k == '__metadata__':
                                 continue
@@ -541,12 +543,10 @@ try:
                                     # Truncated tensor body!
                                     print("0")
                                     sys.exit(0)
-                                valid_tensors_found += 1
-
-                        if is_safetensors and valid_tensors_found == 0 and '__metadata__' not in meta:
+                                has_tensors = True
+                        if not has_tensors and '__metadata__' not in meta:
                             print("0")
                             sys.exit(0)
-
                         # Passed safetensors structural integrity check
                         if expected_sha:
                             h = hashlib.sha256()
@@ -564,7 +564,7 @@ try:
                         print("0")
                         sys.exit(0)
 
-    # 4. PyTorch Zip / Pickle validation
+    # 3. PyTorch Zip / Pickle validation (.ckpt, .pt, .pth, .bin)
     if head.startswith(b'PK\x03\x04') or head.startswith(b'\x80\x02') or head.startswith(b'BIN'):
         if expected_sha:
             h = hashlib.sha256()
@@ -577,7 +577,7 @@ try:
         print("1")
         sys.exit(0)
 
-    # 5. GGUF format validation
+    # 4. GGUF format validation (.gguf)
     if head.startswith(b'GGUF'):
         if expected_sha:
             h = hashlib.sha256()
@@ -590,37 +590,22 @@ try:
         print("1")
         sys.exit(0)
 
-    # 6. ONNX protobuf format validation
-    if filepath.endswith('.onnx') or filepath.endswith('.onnx.part') or head.startswith(b'\x08'):
-        if expected_sha:
-            h = hashlib.sha256()
-            with open(filepath, 'rb') as vf:
-                while chunk := vf.read(1048576):
-                    h.update(chunk)
-            if h.hexdigest().lower() != expected_sha:
-                print("0")
-                sys.exit(0)
-        print("1")
-        sys.exit(0)
-
-    # If format is safetensors or other known model type and reached here, reject
+    # 5. If it claims to be safetensors but reached here -> REJECT immediately!
     if is_safetensors:
         print("0")
         sys.exit(0)
 
-    # Generic binary validation ONLY allowed with explicit expected_sha
+    # 6. Generic binary validation ONLY allowed if expected_sha is provided and matches
     if expected_sha:
         h = hashlib.sha256()
         with open(filepath, 'rb') as vf:
             while chunk := vf.read(1048576):
                 h.update(chunk)
-        if h.hexdigest().lower() != expected_sha:
-            print("0")
+        if h.hexdigest().lower() == expected_sha:
+            print("1")
             sys.exit(0)
-        print("1")
-        sys.exit(0)
 
-    # Unknown un-hashed binary format -> Reject
+    # Unrecognized format without expected SHA is REJECTED
     print("0")
 except Exception:
     print("0")

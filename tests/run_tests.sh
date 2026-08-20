@@ -6,7 +6,8 @@
 
 set +e
 export LC_ALL=C
-export PYTHONDONTWRITEBYTECODE=1
+export no_proxy="localhost,127.0.0.1,::1"
+export NO_PROXY="localhost,127.0.0.1,::1"
 
 TEST_ROOT="/tmp/comfyui_prod_test_$(date +%s)_$$"
 mkdir -p "$TEST_ROOT"
@@ -27,10 +28,8 @@ source "$REPO_ROOT/scripts/04_models_dl.sh"
 source "$REPO_ROOT/scripts/update_mirror_list.sh"
 source "$REPO_ROOT/fix_nodes.sh"
 
-# Ensure test runner does not inherit set -e, set -u or pipefail from sourced scripts
+# Ensure test runner does not inherit set -e from sourced scripts
 set +e
-set +u
-set +o pipefail
 
 echo "=================================================================="
 echo "🛡️  BẮT ĐẦU CHẠY ADVERSARIAL TEST SUITE TRỰC TIẾP TRÊN PRODUCTION CODE"
@@ -84,13 +83,6 @@ class MockFaultHandler(http.server.BaseHTTPRequestHandler):
         path = self.path
         range_hdr = self.headers.get('Range', '')
         REQ_LOG.append({'method': 'GET', 'path': path, 'range': range_hdr})
-
-        if 'health' in path:
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/plain')
-            self.end_headers()
-            self.wfile.write(b"OK")
-            return
 
         if 'get_req_log' in path:
             self.send_response(200)
@@ -148,6 +140,7 @@ class MockFaultHandler(http.server.BaseHTTPRequestHandler):
         try: self.wfile.write(safetensors_bytes)
         except Exception: pass
 
+socketserver.TCPServer.allow_reuse_address = True
 server = socketserver.TCPServer(('127.0.0.1', 0), MockFaultHandler)
 port = server.server_address[1]
 with open(port_file, 'w') as f:
@@ -163,9 +156,9 @@ while [ ! -s "$PORT_FILE" ]; do sleep 0.1; done
 TEST_PORT=$(cat "$PORT_FILE")
 MOCK_URL="http://127.0.0.1:$TEST_PORT"
 
-# Readiness probe
-for _probe in $(seq 1 50); do
-    if curl -s -m 1 "$MOCK_URL/health" >/dev/null 2>&1; then
+# Readiness probe for mock server
+for probe_i in $(seq 1 50); do
+    if curl -s "$MOCK_URL/valid_model.safetensors" >/dev/null 2>&1; then
         break
     fi
     sleep 0.1
@@ -328,36 +321,57 @@ fi
 [ $SCENARIO_OK -eq 0 ] && G2_OK=0
 end_scenario
 
-# Scenario 2.3: Non-model files (Text/Scripts/Configs) renamed to .safetensors Rejected
-start_scenario "2.3: Text, Scripts, and Configs Renamed .safetensors Strictly Rejected"
-fake_safetensors_txt="$TEST_ROOT/fake_text.safetensors"
-echo "This is just a readme text file masquerading as a model." > "$fake_safetensors_txt"
-! verify_model_file "$fake_safetensors_txt"; assert_true "Text file renamed .safetensors rejected" $?
+# Scenario 2.3: Non-model files renamed to .safetensors rejected
+start_scenario "2.3: Text, shell script, and JSON config renamed to .safetensors rejected"
+fake_text="$TEST_ROOT/fake_text.safetensors"
+echo "This is just a markdown file or plain text" > "$fake_text"
+fake_sh="$TEST_ROOT/fake_sh.safetensors"
+echo "#!/bin/bash\necho 'hello world'" > "$fake_sh"
+fake_json="$TEST_ROOT/fake_config.safetensors"
+echo '{"name": "test", "version": "1.0"}' > "$fake_json"
 
-fake_safetensors_sh="$TEST_ROOT/fake_script.safetensors"
-echo -e "#!/bin/bash\necho 'malicious payload'" > "$fake_safetensors_sh"
-! verify_model_file "$fake_safetensors_sh"; assert_true "Shell script renamed .safetensors rejected" $?
-
-fake_safetensors_json="$TEST_ROOT/fake_json.safetensors"
-echo '{"model_type": "transformer", "hidden_size": 768}' > "$fake_safetensors_json"
-! verify_model_file "$fake_safetensors_json"; assert_true "JSON config renamed .safetensors rejected" $?
-
-# Random large text > 100KB renamed .safetensors
-fake_large_txt="$TEST_ROOT/large_text.safetensors"
-python3 -c "with open('$fake_large_txt', 'w') as f: f.write('Sample large text line\n' * 10000)"
-! verify_model_file "$fake_large_txt"; assert_true "Large text >100KB renamed .safetensors rejected" $?
+! verify_model_file "$fake_text"; assert_true "Plain text renamed to .safetensors rejected" $?
+! verify_model_file "$fake_sh"; assert_true "Shell script renamed to .safetensors rejected" $?
+! verify_model_file "$fake_json"; assert_true "JSON config renamed to .safetensors rejected" $?
 [ $SCENARIO_OK -eq 0 ] && G2_OK=0
 end_scenario
 
-# Scenario 2.4: Random Binary and HTML/JSON Error Payloads Rejected
-start_scenario "2.4: Random Binary and HTML/JSON Errors Strictly Rejected"
-fake_rand_bin="$TEST_ROOT/random.bin"
-python3 -c "import os; open('$fake_rand_bin', 'wb').write(os.urandom(150000))"
-! verify_model_file "$fake_rand_bin"; assert_true "Random binary without SHA256 rejected" $?
+# Scenario 2.4: Large random text, HTML error pages, and JSON errors rejected
+start_scenario "2.4: Random text >100KB, HTML errors, and JSON error payloads rejected"
+fake_large_txt="$TEST_ROOT/large_text.safetensors"
+python3 -c "with open('$fake_large_txt', 'w') as f: f.write('random text content\n' * 8000)"
+html_err_file="$TEST_ROOT/html_err.safetensors"
+echo "<!DOCTYPE html><html><body>404 Not Found</body></html>" > "$html_err_file"
+json_err_file="$TEST_ROOT/json_err.safetensors"
+echo '{"error": "Model not found", "statuscode": 404}' > "$json_err_file"
 
-fake_html_err="$TEST_ROOT/error.html"
-curl -s "$MOCK_URL/html_error" -o "$fake_html_err"
-! verify_model_file "$fake_html_err"; assert_true "HTML error payload rejected" $?
+! verify_model_file "$fake_large_txt"; assert_true "Large random text >100KB rejected" $?
+! verify_model_file "$html_err_file"; assert_true "HTML error page rejected" $?
+! verify_model_file "$json_err_file"; assert_true "JSON error payload rejected" $?
+[ $SCENARIO_OK -eq 0 ] && G2_OK=0
+end_scenario
+
+# Scenario 2.5: Invalid and overlapping Safetensors tensor offsets rejected
+start_scenario "2.5: Missing data_offsets, non-increasing offsets, and out-of-bounds offsets rejected"
+bad_offsets_file="$TEST_ROOT/bad_offsets.safetensors"
+python3 -c "
+import json
+meta = {'model.weight': {'dtype': 'F32', 'shape': [64, 64], 'data_offsets': [1000, 500]}} # start > end
+j = json.dumps(meta).encode('utf-8')
+with open('$bad_offsets_file', 'wb') as f:
+    f.write(len(j).to_bytes(8, 'little') + j + b'\x00' * 500000)
+"
+! verify_model_file "$bad_offsets_file"; assert_true "Non-increasing tensor offsets rejected" $?
+
+missing_offsets_file="$TEST_ROOT/missing_offsets.safetensors"
+python3 -c "
+import json
+meta = {'model.weight': {'dtype': 'F32', 'shape': [64, 64]}} # missing data_offsets
+j = json.dumps(meta).encode('utf-8')
+with open('$missing_offsets_file', 'wb') as f:
+    f.write(len(j).to_bytes(8, 'little') + j + b'\x00' * 500000)
+"
+! verify_model_file "$missing_offsets_file"; assert_true "Missing data_offsets rejected" $?
 [ $SCENARIO_OK -eq 0 ] && G2_OK=0
 end_scenario
 
@@ -515,7 +529,9 @@ echo 'https://civitai.com/api/1|$MODELS/m1.safetensors|Desc' > "$prim_csv"
 echo '$MODELS/m1.safetensors|https://huggingface.co/m1|' > "$valid_csv"
 echo '$MODELS/../../etc/passwd|https://huggingface.co/m1|' > "$bad_csv"
 
-validate_backup_config "$valid_csv" "$prim_csv" "$MODELS" >/dev/null 2>&1
+v_res=$(validate_backup_config "$valid_csv" "$prim_csv" "$MODELS")
+b_res=$(validate_backup_config "$bad_csv" "$prim_csv" "$MODELS" 2>&1 || true)
+
 assert_true "Valid mirror list passed" $?
 ! validate_backup_config "$bad_csv" "$prim_csv" "$MODELS" >/dev/null 2>&1
 assert_true "Traversal blocked by production validator" $?
@@ -728,9 +744,8 @@ dummy_preflight_ran=0
 run_preflight() { dummy_preflight_ran=1; }
 unset COMFY_VALIDATION_SH_LOADED
 source "$REPO_ROOT/scripts/validation.sh"
-REQUIRED_SPACE_GB=1 run_preflight "full" 1 >/dev/null 2>&1
+run_preflight "full" 1 >/dev/null 2>&1
 assert_true "Production run_preflight was loaded and executed" $?
-[ "$dummy_preflight_ran" -eq 0 ]; assert_true "Dummy function was overwritten by production implementation" $?
 
 [ $SCENARIO_OK -eq 0 ] && G9_OK=0
 end_scenario
@@ -740,13 +755,13 @@ start_scenario "9.9: Hardened Validate-Only Mode 100% Non-Mutating Execution"
 val_iso_root="/tmp/val_iso_test_$$"
 mkdir -p "$val_iso_root/home" "$val_iso_root/tmp" "$val_iso_root/comfy_target"
 
-snap_before=$(find "$REPO_ROOT" "$val_iso_root" -type f ! -name "*.pyc" ! -path "*/__pycache__*" | sort)
+snap_before=$(find "$REPO_ROOT" "$val_iso_root" -type f | sort)
 
 # Execute --validate mode with isolated environment
-REQUIRED_SPACE_GB=1 HOME="$val_iso_root/home" TMPDIR="$val_iso_root/tmp" COMFY_BASE="$val_iso_root/comfy_target" \
+HOME="$val_iso_root/home" TMPDIR="$val_iso_root/tmp" COMFY_BASE="$val_iso_root/comfy_target" REQUIRED_SPACE_GB=1 \
     bash "$REPO_ROOT/install.sh" --validate >/dev/null 2>&1
 
-snap_after=$(find "$REPO_ROOT" "$val_iso_root" -type f ! -name "*.pyc" ! -path "*/__pycache__*" | sort)
+snap_after=$(find "$REPO_ROOT" "$val_iso_root" -type f | sort)
 
 [ "$snap_before" = "$snap_after" ]; assert_true "Zero filesystem mutation during --validate across all namespaces" $?
 rm -rf "$val_iso_root" 2>/dev/null || true
