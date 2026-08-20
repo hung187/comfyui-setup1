@@ -7,6 +7,7 @@
 set +e
 export LC_ALL=C
 export PYTHONDONTWRITEBYTECODE=1
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY
 export no_proxy="localhost,127.0.0.1,::1"
 export NO_PROXY="localhost,127.0.0.1,::1"
 
@@ -788,7 +789,9 @@ else
 fi
 
 # 2. Verified mirror with valid SHA256 against mock server
-t_real_sha=$(python3 -c "import hashlib; print(hashlib.sha256(open('$out1','rb').read()).hexdigest())")
+t_valid_ref="$TEST_ROOT/ref_valid_mirror.safetensors"
+curl -s "$MOCK_URL/valid_model.safetensors" -o "$t_valid_ref"
+t_real_sha=$(python3 -c "import hashlib; print(hashlib.sha256(open('$t_valid_ref','rb').read()).hexdigest())")
 if download_model_smart "$MOCK_URL/404_dead" "$MOCK_URL/valid_model.safetensors" "$t_out_verified" "Verified Mirror Test" "$t_real_sha" >/dev/null 2>&1; then
     [ -f "$t_out_verified" ]; assert_true "Verified mirror with matching SHA256 committed" $?
 else
