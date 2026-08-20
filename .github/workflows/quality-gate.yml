@@ -34,7 +34,7 @@ jobs:
 
       - name: Run Production Adversarial Test Suite
         run: |
-          bash tests/run_tests.sh
+          bash tests/run_tests.sh 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Run Preflight Validation Gate (Read-Only Mode)
         run: |
