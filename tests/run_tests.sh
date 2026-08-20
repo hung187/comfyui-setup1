@@ -536,9 +536,7 @@ echo 'https://civitai.com/api/1|$MODELS/m1.safetensors|Desc' > "$prim_csv"
 echo '$MODELS/m1.safetensors|https://huggingface.co/m1|' > "$valid_csv"
 echo '$MODELS/../../etc/passwd|https://huggingface.co/m1|' > "$bad_csv"
 
-v_res=$(validate_backup_config "$valid_csv" "$prim_csv" "$MODELS")
-b_res=$(validate_backup_config "$bad_csv" "$prim_csv" "$MODELS" 2>&1 || true)
-
+validate_backup_config "$valid_csv" "$prim_csv" "$MODELS" >/dev/null 2>&1
 assert_true "Valid mirror list passed" $?
 ! validate_backup_config "$bad_csv" "$prim_csv" "$MODELS" >/dev/null 2>&1
 assert_true "Traversal blocked by production validator" $?
