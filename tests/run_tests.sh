@@ -142,8 +142,11 @@ class MockFaultHandler(http.server.BaseHTTPRequestHandler):
         try: self.wfile.write(safetensors_bytes)
         except Exception: pass
 
-socketserver.TCPServer.allow_reuse_address = True
-server = socketserver.TCPServer(('127.0.0.1', 0), MockFaultHandler)
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+server = ThreadedTCPServer(('127.0.0.1', 0), MockFaultHandler)
 port = server.server_address[1]
 with open(port_file, 'w') as f:
     f.write(str(port))
