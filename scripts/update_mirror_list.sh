@@ -3,7 +3,9 @@
 # SCRIPT TỰ ĐỘNG CẬP NHẬT DANH SÁCH MIRROR HÀNG NGÀY VÀ CHẠY TẢI FILE THIẾU
 # ================================================================================================================================
 
-set -euo pipefail
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    set -euo pipefail
+fi
 export LC_ALL=C
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
