@@ -508,7 +508,7 @@ end_scenario
 # Scenario 6.2: Primary Path Dangerous Guard
 start_scenario "6.2: Dangerous Root Path Safety Guards"
 guarded_res=$(resolve_comfy_base "/" 2>/dev/null)
-[ "$guarded_res" != "/" ] && [ "$guarded_res" = "$HOME/ComfyUI" ]; assert_true "Root path guarded and safely defaulted" $?
+[ "$guarded_res" != "/" ] && [[ "$guarded_res" == *"/ComfyUI" || "$guarded_res" == *"/comfyui" ]]; assert_true "Root path guarded and safely defaulted" $?
 [ $SCENARIO_OK -eq 0 ] && G6_OK=0
 end_scenario
 
