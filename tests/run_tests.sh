@@ -85,6 +85,13 @@ class MockFaultHandler(http.server.BaseHTTPRequestHandler):
         range_hdr = self.headers.get('Range', '')
         REQ_LOG.append({'method': 'GET', 'path': path, 'range': range_hdr})
 
+        if 'health' in path:
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b"OK")
+            return
+
         if 'get_req_log' in path:
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -155,6 +162,14 @@ MOCK_PID=$!
 while [ ! -s "$PORT_FILE" ]; do sleep 0.1; done
 TEST_PORT=$(cat "$PORT_FILE")
 MOCK_URL="http://127.0.0.1:$TEST_PORT"
+
+# Readiness probe
+for _probe in $(seq 1 50); do
+    if curl -s -m 1 "$MOCK_URL/health" >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.1
+done
 
 # Test Counters
 TEST_GROUPS_RUN=0
