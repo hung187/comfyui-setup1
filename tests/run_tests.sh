@@ -480,12 +480,151 @@ end_scenario
 [ $G5_OK -eq 1 ] && TEST_GROUPS_PASSED=$((TEST_GROUPS_PASSED + 1))
 
 
-echo -e "\n=== [ GROUP 6: ZERO DATA LOSS CONSOLIDATION (consolidate_comfy_dirs) ] ==="
+echo -e "\n=== [ GROUP 6: UNIVERSAL PROVIDER-AGNOSTIC COMFYUI PATH RESOLVER (resolve_comfy_base) ] ==="
 TEST_GROUPS_RUN=$((TEST_GROUPS_RUN + 1))
 G6_OK=1
 
-# Scenario 6.1: Preservation of Unknown User Data (input/, user/, workflow.json)
-start_scenario "6.1: Full Preservation of Unmanaged User Files and Directories"
+# Scenario 6.1: Provider-Agnostic Path Auto-Discovery (RunPod, EzyCloudX, Vast.ai)
+start_scenario "6.1: Provider-Agnostic Path Auto-Discovery (RunPod, EzyCloudX, Vast.ai)"
+t_prov_root="$TEST_ROOT/prov_test"
+mkdir -p "$t_prov_root"
+
+# RunPod-style
+mkdir -p "$t_prov_root/runpod_ws/workspace/ComfyUI/models"
+touch "$t_prov_root/runpod_ws/workspace/ComfyUI/main.py"
+is_valid_comfyui_dir "$t_prov_root/runpod_ws/workspace/ComfyUI"; assert_true "RunPod-style path validated" $?
+
+# EzyCloudX-style custom path
+mkdir -p "$t_prov_root/ezycloudx/data/ComfyUI/custom_nodes"
+touch "$t_prov_root/ezycloudx/data/ComfyUI/main.py"
+is_valid_comfyui_dir "$t_prov_root/ezycloudx/data/ComfyUI"; assert_true "EzyCloudX-style path validated" $?
+
+# Vast.ai-style template path
+mkdir -p "$t_prov_root/vast/template/ComfyUI/comfy"
+touch "$t_prov_root/vast/template/ComfyUI/main.py"
+is_valid_comfyui_dir "$t_prov_root/vast/template/ComfyUI"; assert_true "Vast-style template path validated" $?
+
+# Auto-discovery with bounded scan on custom directory
+discovered_ezy=$(COMFY_BASE="" COMFY_SCAN_EXTRA_ROOTS="$t_prov_root/ezycloudx" resolve_comfy_base "" 0 2>/dev/null)
+real_ezy=$(readlink -f "$t_prov_root/ezycloudx/data/ComfyUI")
+[ "$discovered_ezy" = "$real_ezy" ]; assert_true "EzyCloudX custom path discovered automatically" $?
+
+[ $SCENARIO_OK -eq 0 ] && G6_OK=0
+end_scenario
+
+# Scenario 6.2: Fake Folder & Incomplete Structural Rejection
+start_scenario "6.2: Fake Folder & Incomplete Structural Rejection"
+t_fake_root="$TEST_ROOT/fake_test"
+mkdir -p "$t_fake_root"
+
+# Fake 1: Folder named ComfyUI with no files
+mkdir -p "$t_fake_root/empty/ComfyUI"
+! is_valid_comfyui_dir "$t_fake_root/empty/ComfyUI"; assert_true "Empty ComfyUI folder rejected" $?
+
+# Fake 2: Folder with main.py only, no secondary structural markers
+mkdir -p "$t_fake_root/orphan/ComfyUI"
+touch "$t_fake_root/orphan/ComfyUI/main.py"
+! is_valid_comfyui_dir "$t_fake_root/orphan/ComfyUI"; assert_true "Orphan main.py without markers rejected" $?
+
+# Fake 3: Dangerous root path rejection
+! is_valid_comfyui_dir "/"; assert_true "Root '/' rejected" $?
+! is_valid_comfyui_dir "/root"; assert_true "System '/root' rejected" $?
+
+[ $SCENARIO_OK -eq 0 ] && G6_OK=0
+end_scenario
+
+# Scenario 6.3: Multiple Installations Ambiguity Protection
+start_scenario "6.3: Multiple Installations Ambiguity Protection"
+t_ambig_root="$TEST_ROOT/ambig_test"
+mkdir -p "$t_ambig_root/inst1/ComfyUI/models" "$t_ambig_root/inst2/ComfyUI/models"
+touch "$t_ambig_root/inst1/ComfyUI/main.py" "$t_ambig_root/inst2/ComfyUI/main.py"
+
+# When multiple installations exist and neither is active, resolve_comfy_base must exit with non-zero
+ambig_out=$(COMFY_BASE="" COMFY_SCAN_EXTRA_ROOTS="$t_ambig_root" resolve_comfy_base "" 0 2>&1 || true)
+echo "$ambig_out" | grep -q "MULTIPLE COMFYUI INSTALLATIONS FOUND"; assert_true "Ambiguity detected and reported" $?
+! COMFY_BASE="" COMFY_SCAN_EXTRA_ROOTS="$t_ambig_root" resolve_comfy_base "" 0 >/dev/null 2>&1
+assert_true "Ambiguity returns non-zero status" $?
+
+[ $SCENARIO_OK -eq 0 ] && G6_OK=0
+end_scenario
+
+# Scenario 6.4: Active Running Process Priority
+start_scenario "6.4: Active Running Process Priority"
+t_act_root="$TEST_ROOT/active_test"
+inst_a="$t_act_root/inst_a/ComfyUI"
+inst_b="$t_act_root/inst_b/ComfyUI"
+mkdir -p "$inst_a/models" "$inst_b/models"
+touch "$inst_a/main.py"
+echo "import time; time.sleep(10)" > "$inst_b/main.py"
+
+# Simulate active process running inst_b
+python3 "$inst_b/main.py" &
+mock_act_pid=$!
+sleep 0.2
+
+# Running process detection
+active_det=$(detect_running_comfyui 2>/dev/null)
+real_inst_b=$(readlink -f "$inst_b")
+echo "$active_det" | grep -q "$real_inst_b"; assert_true "Active running process detected" $?
+
+# Ambiguity resolved in favor of active process
+act_res=$(COMFY_BASE="" COMFY_SCAN_EXTRA_ROOTS="$t_act_root" resolve_comfy_base "" 0 2>/dev/null)
+[ "$act_res" = "$real_inst_b" ]; assert_true "Active instance selected over dormant duplicate" $?
+
+kill -9 $mock_act_pid 2>/dev/null || true
+wait $mock_act_pid 2>/dev/null || true
+
+[ $SCENARIO_OK -eq 0 ] && G6_OK=0
+end_scenario
+
+# Scenario 6.5: Explicit CLI & Environment Priority Hierarchy
+start_scenario "6.5: Explicit CLI & Environment Priority Hierarchy"
+t_hier_root="$TEST_ROOT/hier_test"
+mkdir -p "$t_hier_root/cli/ComfyUI/models" "$t_hier_root/env/ComfyUI/models"
+touch "$t_hier_root/cli/ComfyUI/main.py" "$t_hier_root/env/ComfyUI/main.py"
+
+real_cli_dir=$(readlink -f "$t_hier_root/cli/ComfyUI")
+real_env_dir=$(readlink -f "$t_hier_root/env/ComfyUI")
+
+# CLI wins over COMFY_BASE
+res_cli=$(COMFY_BASE="$real_env_dir" resolve_comfy_base "$real_cli_dir" 0 2>/dev/null)
+[ "$res_cli" = "$real_cli_dir" ]; assert_true "Explicit CLI --comfy-dir overrides COMFY_BASE" $?
+
+# COMFYUI_DIR supported
+res_env1=$(COMFY_BASE="" COMFYUI_DIR="$real_env_dir" resolve_comfy_base "" 0 2>/dev/null)
+[ "$res_env1" = "$real_env_dir" ]; assert_true "COMFYUI_DIR environment variable honored" $?
+
+# COMFY_DIR supported
+res_env2=$(COMFY_BASE="" COMFY_DIR="$real_env_dir" resolve_comfy_base "" 0 2>/dev/null)
+[ "$res_env2" = "$real_env_dir" ]; assert_true "COMFY_DIR environment variable honored" $?
+
+# Dangerous root safe fallback
+res_bad=$(COMFY_BASE="" resolve_comfy_base "/" 0 2>/dev/null)
+[ "$res_bad" != "/" ] && [[ "$res_bad" == *"/ComfyUI" || "$res_bad" == *"/comfyui" ]]; assert_true "Dangerous root safely redirected" $?
+
+[ $SCENARIO_OK -eq 0 ] && G6_OK=0
+end_scenario
+
+# Scenario 6.6: Node and Model Path Consistency
+start_scenario "6.6: Node and Model Path Consistency"
+t_cons_root="$TEST_ROOT/cons_test/ComfyUI"
+mkdir -p "$t_cons_root/models"
+touch "$t_cons_root/main.py"
+
+(
+    export COMFY_BASE="$t_cons_root"
+    init_runtime_env >/dev/null 2>&1
+    [ "$CUSTOM_NODES" = "$COMFY_BASE/custom_nodes" ] && \
+    [ "$MODELS" = "$COMFY_BASE/models" ] && \
+    [ -d "$CUSTOM_NODES" ] && [ -d "$MODELS" ]
+)
+assert_true "CUSTOM_NODES and MODELS derive strictly from resolved COMFY_BASE" $?
+
+[ $SCENARIO_OK -eq 0 ] && G6_OK=0
+end_scenario
+
+# Scenario 6.7: Zero Data Loss Preservation Engine (consolidate_comfy_dirs)
+start_scenario "6.7: Zero Data Loss Preservation Engine (consolidate_comfy_dirs)"
 prim_c="$TEST_ROOT/PrimComfy"
 sec_c="$TEST_ROOT/SecComfy"
 mkdir -p "$prim_c/models" "$sec_c/models" "$sec_c/user" "$sec_c/input/sub"
@@ -505,13 +644,6 @@ assert_true "Consolidation exited 0" $?
 [ -f "$prim_c/preserve_quarantine/unclassified_secondary/input/sub/photo.png" ]; assert_true "input photo preserved" $?
 [ -f "$prim_c/models/a.safetensors" ]; assert_true "models/a.safetensors migrated" $?
 
-[ $SCENARIO_OK -eq 0 ] && G6_OK=0
-end_scenario
-
-# Scenario 6.2: Primary Path Dangerous Guard
-start_scenario "6.2: Dangerous Root Path Safety Guards"
-guarded_res=$(resolve_comfy_base "/" 2>/dev/null)
-[ "$guarded_res" != "/" ] && [[ "$guarded_res" == *"/ComfyUI" || "$guarded_res" == *"/comfyui" ]]; assert_true "Root path guarded and safely defaulted" $?
 [ $SCENARIO_OK -eq 0 ] && G6_OK=0
 end_scenario
 

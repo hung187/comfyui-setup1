@@ -2,7 +2,7 @@
 
 > **Dự án**: `comfyui-setup1`
 > **Mục đích**: Bộ script Bash & Python mô-đun hóa, hoàn toàn tự động triển khai, tối ưu hóa đĩa cứng và khôi phục sự cố cho **ComfyUI** trên Linux Server / GPU Cloud (RunPod, Vast.ai, Google Colab, Kaggle, SageMaker, Local Linux).
-> **Lĩnh vực ứng dụng chính**: Vẽ ảnh Anime 2D (Illustrious XL, Pony) & Dựng mô hình 3D từ ảnh 2D (TRELLIS2).
+> **Lĩnh vực ứng dụng chính**: Vẽ ảnh Anime 3D (Illustrious XL, Pony) & Dựng mô hình 3D từ ảnh 2D (TRELLIS2).
 
 ---
 
@@ -27,7 +27,7 @@ comfyui-setup1/
     ├── 02_comfy_core.sh    ← Stage 02: Token Civitai & Clone ComfyUI
     ├── 03_nodes_setup.sh   ← Stage 03: Clone Nodes & pip requirements
     ├── 04_models_dl.sh     ← Stage 04: Động cơ tải Model Đa Nguồn Nguyên Tử
-    ├── 05_manifest.sh      ← Stage 05: Báo cáo Markdown & JSON Manifest
+    ├── 06_manifest.sh      ← Stage 05: Báo cáo Markdown & JSON Manifest
     ├── 06_gdrive_sync.sh   ← Stage 06: Đồng bộ ảnh real-time sang Google Drive
     └── update_mirror_list.sh ← Cập nhật mirror manifest tự động hàng ngày
 ```
@@ -36,13 +36,17 @@ comfyui-setup1/
 
 ## 🧠 2. PHÂN TÍCH CHI TIẾT CÁC THUẬT TOÁN CỐT LÕI (ALGORITHMIC DISSECTION)
 
-### 🔹 Thuật Toán 1: Tự Động Phát Hiện & Gộp Thư Mục Trùng Lặp (`resolve_comfy_base`)
+### 🔹 Thuật Toán 1: Tự Động Phát Hiện Đường Dẫn Đa Nền Tảng & Bảo Vệ Xung Đột (`resolve_comfy_base`)
 - **Tệp thực thi**: `scripts/common.sh`
-- **Bài toán**: Trên môi trường Cloud Container (RunPod, Kaggle, Colab, Vast.ai), ComfyUI có thể nằm ở các đường dẫn khác nhau (`/app/ComfyUI`, `/workspace/ComfyUI`, `/content/ComfyUI`, `$HOME/ComfyUI`...). Việc tồn tại nhiều thư mục gây lãng phí dung lượng đĩa.
-- **Cơ chế vận hành**:
-  1. Duyệt qua mảng 12+ đường dẫn tiêu chuẩn và quét tìm sự tồn tại của file nhận diện `main.py` hoặc `folder_paths.py`.
-  2. Nếu không thấy, sử dụng `find /app /workspace /content /root /opt $HOME -maxdepth 3 -name "main.py"` để quét sâu.
-  3. **Thuật toán Consolidate (Gộp đĩa)**: Nếu hệ thống phát hiện > 1 thư mục ComfyUI, nó chọn thư mục đầu tiên làm `primary_target`, sau đó dùng `cp -rn` để gộp toàn bộ dữ liệu `models/`, `custom_nodes/`, `output/` từ các thư mục phụ về thư mục chính, rồi thực hiện `rm -rf` xóa thư mục phụ để giải phóng dung lượng đĩa.
+- **Bài toán**: Trên các GPU provider khác nhau (RunPod, Vast.ai, EzyCloudX, Colab, Kaggle, SageMaker, Local Linux), ComfyUI có thể nằm ở các đường dẫn tùy biến. Script không giả định cứng `/workspace/ComfyUI` mà tự động phát hiện theo thứ tự ưu tiên nghiêm ngặt.
+- **Thứ tự ưu tiên 5 cấp độ (5-Tier Priority)**:
+  1. **CLI Explicit**: Tham số `--comfy-dir <PATH>` từ dòng lệnh có quyền ưu tiên cao nhất.
+  2. **Environment Variables**: Các biến `COMFY_BASE`, `COMFYUI_DIR`, `COMFY_DIR`, `COMFYUI_PATH`.
+  3. **Running Process Detection**: Quét `/proc` và bảng tiến trình tìm process `python.*main.py` đang hoạt động và trích xuất đường dẫn repository thực tế.
+  4. **Known Provider Paths**: Duyệt danh sách đường dẫn tiêu chuẩn (`/workspace/ComfyUI`, `/root/ComfyUI`, `/app/ComfyUI`, `/opt/ComfyUI`, `/content/ComfyUI`, `$HOME/ComfyUI`...).
+  5. **Bounded Discovery**: Quét giới hạn (`maxdepth 4`) dưới các root an toàn (`/workspace`, `/app`, `/opt`, `/content`, `/kaggle/working`, `/data`, `/mnt`, `$HOME`).
+- **Candidate Validation**: Chỉ chấp nhận thư mục khi có `main.py` VÀ ít nhất một dấu hiệu cấu trúc ComfyUI thực sự (`comfy/`, `models/`, `custom_nodes/`, `folder_paths.py`, `execution.py`, `nodes.py`). Từ chối các thư mục giả mạo hoặc thư mục hệ thống nguy hiểm.
+- **Ambiguity Protection (Bảo vệ đa cài đặt)**: Nếu phát hiện > 1 bản cài đặt hợp lệ mà không có bản nào đang active, hệ thống tuyệt đối KHÔNG tự ý chọn hay xóa đĩa, mà dừng lại và yêu cầu người dùng chỉ định rõ qua `--comfy-dir <PATH>`.
 
 ### 🔹 Thuật Toán 2: Xử Lý Token Civitai & Timeout Không Chặn (`prompt_civitai_token`)
 - **Tệp thực thi**: `install.sh` & `scripts/02_comfy_core.sh`

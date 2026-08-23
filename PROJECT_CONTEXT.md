@@ -29,7 +29,7 @@ install.sh (Entry point)
 ## 4. Trạng Thái Release
 - **Remote**: `git@github.com:hung187/comfyui-setup1.git` (branch `main`)
 - **Remote CI**: GitHub Actions Quality Gate — **PASS (100% Success)**
-- **Regression Tests**: 9/9 Groups PASS, 29/29 Scenarios PASS, 89/89 Assertions PASS.
+- **Regression Tests**: 9/9 Groups PASS, 34/34 Scenarios PASS, 105/105 Assertions PASS.
 - **SHA256 Authoritative Coverage**: 30/42 models verified via first-party metadata APIs (`docs/MODEL_HASH_PROVENANCE.md`).
 - **Effective Fallback Matrix**: `docs/MODEL_SOURCE_COVERAGE.md`.
 - **Preflight Mode**: `./install.sh --validate` (Read-only, zero filesystem mutations).

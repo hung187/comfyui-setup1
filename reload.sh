@@ -3,55 +3,30 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-find_comfy_dir() {
-    if [ -n "${COMFY_BASE:-}" ] && [ -f "$COMFY_BASE/main.py" ]; then
-        echo "$COMFY_BASE"
-        return 0
-    fi
-
-    local candidates=(
-        "/app/ComfyUI"
-        "/app/comfyUI"
-        "/workspace/ComfyUI"
-        "/workspace/comfyui"
-        "/content/ComfyUI"
-        "/content/drive/MyDrive/ComfyUI"
-        "$HOME/ComfyUI"
-        "/root/ComfyUI"
-        "$PWD/ComfyUI"
-        "$(dirname "$SCRIPT_DIR")/ComfyUI"
-        "$PWD"
-    )
-
-    for path in "${candidates[@]}"; do
-        if [ -d "$path" ] && [ -f "$path/main.py" ]; then
-            echo "$path"
-            return 0
-        fi
-    done
-
-    local found_path
-    found_path=$(find /app /workspace /content /root /opt "$HOME" -maxdepth 3 -name "main.py" 2>/dev/null | grep -i "ComfyUI" | head -n 1)
-    if [ -n "$found_path" ]; then
-        echo "$(dirname "$found_path")"
-        return 0
-    fi
-
-    echo "$HOME/ComfyUI"
-}
-
-COMFY_DIR="$(find_comfy_dir)"
-
-echo -e "\033[0;36m🔍 Phát hiện thư mục ComfyUI tại:\033[0m $COMFY_DIR"
-
-if [ ! -f "$COMFY_DIR/main.py" ]; then
-    echo -e "\033[0;33m💡 Đang tự động tìm kiếm vị trí main.py trên toàn bộ đĩa...\033[0m"
-    SEARCH_RESULT=$(find / -name "main.py" 2>/dev/null | grep -i "ComfyUI" | head -n 1)
-    if [ -n "$SEARCH_RESULT" ]; then
-        COMFY_DIR="$(dirname "$SEARCH_RESULT")"
-        echo -e "\033[0;32m✅ Đã tìm thấy ComfyUI tại:\033[0m $COMFY_DIR"
-    fi
+if [ -f "$SCRIPT_DIR/scripts/common.sh" ]; then
+    source "$SCRIPT_DIR/scripts/common.sh"
 fi
+
+CLI_COMFY_DIR=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --comfy-dir)
+            CLI_COMFY_DIR="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+if declare -f resolve_comfy_base >/dev/null 2>&1; then
+    COMFY_DIR="$(resolve_comfy_base "${CLI_COMFY_DIR:-${COMFY_BASE:-}}" 0)"
+else
+    COMFY_DIR="${CLI_COMFY_DIR:-${COMFY_BASE:-$HOME/ComfyUI}}"
+fi
+
+echo -e "\033[0;36m🔍 Sử dụng thư mục ComfyUI tại:\033[0m $COMFY_DIR"
 
 if [ -d "$COMFY_DIR" ] && [ -f "$COMFY_DIR/main.py" ]; then
     echo -e "\033[0;34m⚡ Đang dọn dẹp tiến trình cũ và giải phóng Cổng 8188...\033[0m"

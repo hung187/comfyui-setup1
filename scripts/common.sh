@@ -212,137 +212,325 @@ sys.exit(0)
 PY_CONSOLIDATE
 }
 
-# Auto-detect ComfyUI path across Cloud Servers & Local Machines + Safe Non-Destructive Consolidation
-resolve_comfy_base() {
-    local candidate_cli="${1:-}"
-    local primary_target=""
+# Verify if a directory is a valid ComfyUI installation (has main.py and secondary structural markers)
+is_valid_comfyui_dir() {
+    local target="${1:-}"
+    [ -z "$target" ] && return 1
 
-    # CLI / Env explicit override takes priority
-    if [ -n "$candidate_cli" ]; then
-        primary_target="$candidate_cli"
-    elif [ -n "${COMFY_BASE:-}" ]; then
-        primary_target="$COMFY_BASE"
-    elif [ -n "${COMFYUI_PATH:-}" ]; then
-        primary_target="$COMFYUI_PATH"
+    local real_dir
+    real_dir=$(readlink -f "$target" 2>/dev/null || realpath "$target" 2>/dev/null || echo "$target")
+    [ ! -d "$real_dir" ] && return 1
+
+    # Must not be a dangerous system root
+    local dangerous_roots=("/" "/root" "/workspace" "/app" "/content" "/home" "/etc" "/var" "/usr" "/bin" "/sbin" "/tmp" "/kaggle/working" "/opt" "/data" "/mnt")
+    for dr in "${dangerous_roots[@]}"; do
+        if [ "$real_dir" = "$dr" ]; then
+            return 1
+        fi
+    done
+
+    # Must have main.py
+    [ ! -f "$real_dir/main.py" ] && return 1
+
+    # Must have strong ComfyUI secondary structural markers
+    if [ -d "$real_dir/comfy" ] || [ -f "$real_dir/folder_paths.py" ] || [ -f "$real_dir/execution.py" ] || [ -f "$real_dir/nodes.py" ]; then
+        return 0
     fi
 
-    # Known common cloud & server paths
-    local search_paths=(
-        "/app/ComfyUI"
-        "/app/comfyUI"
+    # Or named ComfyUI/comfyui with models or custom_nodes folder
+    local bname
+    bname=$(basename "$real_dir" | tr '[:upper:]' '[:lower:]')
+    if [[ "$bname" == *"comfy"* ]] && { [ -d "$real_dir/models" ] || [ -d "$real_dir/custom_nodes" ]; }; then
+        return 0
+    fi
+
+    return 1
+}
+
+# Inspect running processes to detect active ComfyUI instance without killing or modifying it
+detect_running_comfyui() {
+    python3 - <<'PY_DETECT_ACTIVE' 2>/dev/null
+import os, sys, glob
+
+active = set()
+
+def check_dir(p):
+    if not p or not os.path.isdir(p): return False
+    if not os.path.isfile(os.path.join(p, "main.py")): return False
+    if (
+        os.path.isdir(os.path.join(p, "comfy")) or
+        os.path.isfile(os.path.join(p, "folder_paths.py")) or
+        os.path.isfile(os.path.join(p, "execution.py")) or
+        os.path.isfile(os.path.join(p, "nodes.py"))
+    ):
+        return True
+    bname = os.path.basename(p).lower()
+    if 'comfy' in bname and (os.path.isdir(os.path.join(p, "models")) or os.path.isdir(os.path.join(p, "custom_nodes"))):
+        return True
+    return False
+
+# Scan /proc
+for p in glob.glob('/proc/[0-9]*'):
+    try:
+        cmd_file = os.path.join(p, 'cmdline')
+        if not os.path.isfile(cmd_file):
+            continue
+        with open(cmd_file, 'rb') as f:
+            raw = f.read()
+        if not raw:
+            continue
+        args = [a.decode('utf-8', errors='ignore') for a in raw.split(b'\0') if a]
+        cmd_str = ' '.join(args)
+        if 'main.py' in cmd_str:
+            for arg in args:
+                if arg.endswith('main.py'):
+                    if os.path.isabs(arg):
+                        cand = os.path.dirname(arg)
+                    else:
+                        cwd = os.readlink(os.path.join(p, 'cwd'))
+                        cand = os.path.normpath(os.path.join(cwd, os.path.dirname(arg)))
+                    cand_real = os.path.realpath(cand)
+                    if check_dir(cand_real):
+                        active.add(cand_real)
+            try:
+                proc_cwd = os.readlink(os.path.join(p, 'cwd'))
+                proc_cwd_real = os.path.realpath(proc_cwd)
+                if check_dir(proc_cwd_real):
+                    active.add(proc_cwd_real)
+            except Exception:
+                pass
+    except Exception:
+        continue
+
+# Fallback ps if /proc not accessible
+if not active:
+    try:
+        import subprocess
+        out = subprocess.check_output(['ps', '-eo', 'pid,args'], text=True, stderr=subprocess.DEVNULL)
+        for line in out.splitlines():
+            if 'main.py' in line and ('python' in line or 'ComfyUI' in line or 'comfy' in line.lower()):
+                for token in line.strip().split():
+                    if token.endswith('main.py') and os.path.isabs(token):
+                        cand = os.path.realpath(os.path.dirname(token))
+                        if check_dir(cand):
+                            active.add(cand)
+    except Exception:
+        pass
+
+for a in sorted(active):
+    print(a)
+PY_DETECT_ACTIVE
+}
+
+# Bounded discovery of valid ComfyUI directories under known provider paths and safe roots
+discover_comfyui_candidates() {
+    local known_paths=(
         "/workspace/ComfyUI"
         "/workspace/comfyui"
+        "/root/ComfyUI"
+        "/root/comfyui"
+        "/app/ComfyUI"
+        "/app/comfyUI"
+        "/app/comfyui"
+        "/opt/ComfyUI"
+        "/opt/comfyui"
+        "/opt/ml/code/ComfyUI"
         "/content/ComfyUI"
         "/content/drive/MyDrive/ComfyUI"
         "/kaggle/working/ComfyUI"
-        "/opt/ml/code/ComfyUI"
         "$HOME/ComfyUI"
         "$HOME/comfyui"
         "$PWD/ComfyUI"
         "$PWD"
     )
 
-    # 1. Collect all valid existing ComfyUI installations
-    local existing_dirs=()
-    for p in "${search_paths[@]}"; do
-        if [ -d "$p" ] && { [ -f "$p/main.py" ] || [ -f "$p/folder_paths.py" ]; }; then
-            local real_p
-            real_p=$(readlink -f "$p" 2>/dev/null || echo "$p")
-            local already_added=0
-            for e in "${existing_dirs[@]}"; do
-                if [ "$e" = "$real_p" ]; then
-                    already_added=1
-                    break
-                fi
+    local found_list=()
+
+    # 1. Direct check of known provider paths
+    for kp in "${known_paths[@]}"; do
+        if is_valid_comfyui_dir "$kp"; then
+            local rkp
+            rkp=$(readlink -f "$kp" 2>/dev/null || echo "$kp")
+            local already=0
+            for f in "${found_list[@]}"; do
+                [ "$f" = "$rkp" ] && { already=1; break; }
             done
-            if [ $already_added -eq 0 ]; then
-                existing_dirs+=("$real_p")
-            fi
+            [ $already -eq 0 ] && found_list+=("$rkp")
         fi
     done
 
-    # Fallback to system-wide search if no standard path had main.py
-    if [ ${#existing_dirs[@]} -eq 0 ]; then
-        local search_dirs=()
-        for d in /app /workspace /content /root /opt "$HOME"; do
-            [ -d "$d" ] && [ -r "$d" ] && search_dirs+=("$d")
+    # 2. Bounded scan under safe roots (maxdepth 4)
+    local scan_roots=(
+        "/workspace"
+        "/app"
+        "/opt"
+        "/content"
+        "/kaggle/working"
+        "/data"
+        "/mnt"
+        "$HOME"
+    )
+    [ -d "/root" ] && [ -r "/root" ] && [ "/root" != "$HOME" ] && scan_roots+=("/root")
+
+    if [ -n "${COMFY_SCAN_EXTRA_ROOTS:-}" ]; then
+        for extra in $COMFY_SCAN_EXTRA_ROOTS; do
+            [ -d "$extra" ] && scan_roots+=("$extra")
         done
-        if [ ${#search_dirs[@]} -gt 0 ]; then
-            while IFS= read -r found_main; do
-                if [ -n "$found_main" ]; then
-                    local found_dir
-                    found_dir=$(dirname "$found_main")
-                    local real_p
-                    real_p=$(readlink -f "$found_dir" 2>/dev/null || echo "$found_dir")
-                    existing_dirs+=("$real_p")
-                fi
-            done < <(find "${search_dirs[@]}" -maxdepth 3 -name "main.py" 2>/dev/null | head -n 5)
+    fi
+
+    # Check /tmp subdirectories if existing (for provider-like fixtures)
+    for tmp_sub in /tmp/*; do
+        if [ -d "$tmp_sub" ] && [ ! -L "$tmp_sub" ]; then
+            scan_roots+=("$tmp_sub")
         fi
-    fi
+    done
 
-    # 2. Pick primary target directory
-    if [ -z "$primary_target" ]; then
-        if [ ${#existing_dirs[@]} -gt 0 ]; then
-            primary_target="${existing_dirs[0]}"
-        else
-            if [ -d "/app" ] && [ -w "/app" ]; then
-                primary_target="/app/ComfyUI"
-            elif [ -d "/workspace" ] && [ -w "/workspace" ]; then
-                primary_target="/workspace/ComfyUI"
-            elif [ -d "/content" ] && [ -w "/content" ]; then
-                primary_target="/content/ComfyUI"
-            else
-                primary_target="$HOME/ComfyUI"
+    for root in "${scan_roots[@]}"; do
+        [ ! -d "$root" ] || [ ! -r "$root" ] && continue
+        while IFS= read -r fmain; do
+            [ -z "$fmain" ] && continue
+            local cand_dir
+            cand_dir=$(dirname "$fmain")
+            if is_valid_comfyui_dir "$cand_dir"; then
+                local rcand
+                rcand=$(readlink -f "$cand_dir" 2>/dev/null || echo "$cand_dir")
+                local already=0
+                for f in "${found_list[@]}"; do
+                    [ "$f" = "$rcand" ] && { already=1; break; }
+                done
+                [ $already -eq 0 ] && found_list+=("$rcand")
             fi
+        done < <(find "$root" -maxdepth 4 -name "main.py" -type f 2>/dev/null | head -n 20)
+    done
+
+    for fl in "${found_list[@]}"; do
+        printf '%s\n' "$fl"
+    done
+}
+
+# Auto-detect ComfyUI path across Cloud Servers & Local Machines (Provider-Agnostic Priority)
+resolve_comfy_base() {
+    local candidate_cli="${1:-}"
+    local allow_fresh="${2:-1}"
+
+    # ── Priority 1: Explicit CLI (--comfy-dir) ──────────────────────────
+    if [ -n "$candidate_cli" ]; then
+        local real_cli
+        real_cli=$(readlink -f "$candidate_cli" 2>/dev/null || echo "$candidate_cli")
+        if ! validate_safe_path "$real_cli" 2>/dev/null; then
+            echo -e "${RED}⚠️  Đường dẫn CLI --comfy-dir không an toàn ($candidate_cli), fallback về $HOME/ComfyUI${NC}" >&2
+            printf '%s\n' "$HOME/ComfyUI"
+            return 0
         fi
+        printf '%s\n' "$real_cli"
+        return 0
     fi
 
-    primary_target=$(readlink -f "$primary_target" 2>/dev/null || echo "$primary_target")
-
-    # Safety Guard on primary_target
-    if ! validate_safe_path "$primary_target" 2>/dev/null; then
-        echo -e "${RED}⚠️  COMFY_BASE target không an toàn ($primary_target), fallback về $HOME/ComfyUI${NC}" >&2
-        primary_target="$HOME/ComfyUI"
+    # ── Priority 2: Explicit Environment Variables ──────────────────────
+    local env_val=""
+    if [ -n "${COMFY_BASE:-}" ]; then
+        env_val="$COMFY_BASE"
+    elif [ -n "${COMFYUI_DIR:-}" ]; then
+        env_val="$COMFYUI_DIR"
+    elif [ -n "${COMFY_DIR:-}" ]; then
+        env_val="$COMFY_DIR"
+    elif [ -n "${COMFYUI_PATH:-}" ]; then
+        env_val="$COMFYUI_PATH"
     fi
 
-    mkdir -p "$primary_target" 2>/dev/null || true
+    if [ -n "$env_val" ]; then
+        local real_env
+        real_env=$(readlink -f "$env_val" 2>/dev/null || echo "$env_val")
+        if ! validate_safe_path "$real_env" 2>/dev/null; then
+            echo -e "${RED}⚠️  Đường dẫn biến môi trường không an toàn ($env_val), fallback về $HOME/ComfyUI${NC}" >&2
+            printf '%s\n' "$HOME/ComfyUI"
+            return 0
+        fi
+        printf '%s\n' "$real_env"
+        return 0
+    fi
 
-    # 3. SAFE Consolidation: Full inventory + verification before any deletion
-    if [ ${#existing_dirs[@]} -gt 1 ]; then
-        echo -e "${YELLOW}🔍 Phát hiện có ${#existing_dirs[@]} thư mục ComfyUI trên hệ thống!${NC}" >&2
-        echo -e "${GREEN}🎯 Thư mục chính được chọn:${NC} $primary_target" >&2
+    echo -e "${CYAN}🔎 Detecting ComfyUI...${NC}" >&2
 
-        for dup in "${existing_dirs[@]}"; do
-            local dup_real
-            dup_real=$(readlink -f "$dup" 2>/dev/null || echo "$dup")
+    # ── Priority 3: Active Running ComfyUI Process ───────────────────────
+    local active_dirs=()
+    while IFS= read -r adir; do
+        [ -n "$adir" ] && is_valid_comfyui_dir "$adir" && active_dirs+=("$adir")
+    done < <(detect_running_comfyui 2>/dev/null)
 
-            # === SANITY GUARDS BEFORE ANY OPERATION ===
-            if ! validate_safe_path "$dup_real" 2>/dev/null; then
-                echo -e "${RED}⚠️  Bỏ qua đường dẫn không an toàn hoặc thư mục gốc hệ thống:${NC} $dup_real" >&2
-                continue
-            fi
+    # ── Priority 4 & 5: Known Paths & Bounded Filesystem Discovery ────────
+    local discovered_dirs=()
+    while IFS= read -r ddir; do
+        [ -n "$ddir" ] && is_valid_comfyui_dir "$ddir" && discovered_dirs+=("$ddir")
+    done < <(discover_comfyui_candidates 2>/dev/null)
 
-            if [ "$dup_real" != "$primary_target" ] && [ -d "$dup_real" ]; then
-                echo -e "${YELLOW}📦 Đang kiểm tra & gộp an toàn dữ liệu từ thư mục phụ ($dup_real)...${NC}" >&2
-
-                if consolidate_comfy_dirs "$dup_real" "$primary_target" >&2; then
-                    # Verify ComfyUI marker in candidate before safe cleanup
-                    if [ -f "$dup_real/main.py" ] || [ -f "$dup_real/folder_paths.py" ] || [ -d "$dup_real/models" ]; then
-                        echo -e "${GREEN}✅ Đã di chuyển và xác thực 100% dữ liệu từ $dup_real an toàn.${NC}" >&2
-                        rm -rf "$dup_real" 2>/dev/null || true
-                    else
-                        echo -e "${YELLOW}⚠️  Thiếu marker ComfyUI, giữ nguyên $dup_real.${NC}" >&2
-                    fi
-                else
-                    echo -e "${RED}⚠️  Có file chưa được xác thực trong $dup_real. GIỮ NGUYÊN THƯ MỤC để đảm bảo an toàn tuyệt đối.${NC}" >&2
-                fi
-            fi
+    # Merge active dirs and discovered dirs (deduplicated)
+    local all_candidates=()
+    for d in "${active_dirs[@]}" "${discovered_dirs[@]}"; do
+        local already=0
+        for c in "${all_candidates[@]}"; do
+            [ "$c" = "$d" ] && { already=1; break; }
         done
+        [ $already -eq 0 ] && all_candidates+=("$d")
+    done
+
+    # ── Case A: Exactly 1 Active running ComfyUI process ─────────────────
+    if [ ${#active_dirs[@]} -eq 1 ]; then
+        local chosen="${active_dirs[0]}"
+        echo -e "${GREEN}✅ Found active running ComfyUI:${NC} $chosen" >&2
+        printf '%s\n' "$chosen"
+        return 0
+    fi
+
+    # ── Case B: Exactly 1 valid candidate discovered ─────────────────────
+    if [ ${#all_candidates[@]} -eq 1 ]; then
+        local chosen="${all_candidates[0]}"
+        echo -e "${GREEN}✅ Found existing ComfyUI:${NC} $chosen" >&2
+        printf '%s\n' "$chosen"
+        return 0
+    fi
+
+    # ── Case C: Multiple valid candidates found (Ambiguity Protection) ───
+    if [ ${#all_candidates[@]} -gt 1 ]; then
+        echo -e "\n${RED}════════════════════════════════════════════════════════════════${NC}" >&2
+        echo -e "${RED}❌ MULTIPLE COMFYUI INSTALLATIONS FOUND (${#all_candidates[@]} installations)${NC}" >&2
+        echo -e "${RED}════════════════════════════════════════════════════════════════${NC}" >&2
+        echo -e "${YELLOW}Hệ thống phát hiện nhiều thư mục cài đặt ComfyUI hợp lệ:${NC}" >&2
+        local idx=1
+        for cand in "${all_candidates[@]}"; do
+            echo -e "  ${CYAN}$idx.${NC} $cand" >&2
+            idx=$((idx + 1))
+        done
+        echo -e "\n${YELLOW}👉 Để đảm bảo an toàn, vui lòng chỉ định chính xác thư mục cần dùng:${NC}" >&2
+        echo -e "   ${GREEN}bash <script>.sh --comfy-dir /path/to/ComfyUI${NC}" >&2
+        echo -e "hoặc thiết lập biến môi trường:" >&2
+        echo -e "   ${GREEN}export COMFY_BASE=/path/to/ComfyUI${NC}\n" >&2
+        return 1
+    fi
+
+    # ── Case D: Zero candidates found (0) ─────────────────────────────────
+    echo -e "${YELLOW}💡 EXISTING COMFYUI NOT FOUND${NC}" >&2
+
+    local default_target=""
+    if [ -d "/workspace" ] && [ -w "/workspace" ]; then
+        default_target="/workspace/ComfyUI"
+    elif [ -d "/app" ] && [ -w "/app" ]; then
+        default_target="/app/ComfyUI"
+    elif [ -d "/content" ] && [ -w "/content" ]; then
+        default_target="/content/ComfyUI"
     else
-        echo -e "${GREEN}🔍 Phát hiện thư mục ComfyUI hiện có tại:${NC} $primary_target" >&2
+        default_target="$HOME/ComfyUI"
     fi
 
-    printf '%s\n' "$primary_target"
+    default_target=$(readlink -f "$default_target" 2>/dev/null || echo "$default_target")
+
+    if [ "$allow_fresh" -eq 1 ]; then
+        echo -e "📦 Fresh installation will be used: ${GREEN}YES${NC} (Target: $default_target)" >&2
+    else
+        echo -e "📦 Fresh installation will be used: ${YELLOW}NO${NC} (Default target: $default_target)" >&2
+    fi
+    printf '%s\n' "$default_target"
+    return 0
 }
 
 # Auto-install missing tools dynamically
@@ -390,7 +578,11 @@ ensure_tool_installed() {
 # Initialize environment paths and flags
 init_runtime_env() {
     export LC_ALL=C
-    COMFY_BASE="$(resolve_comfy_base "${COMFY_BASE:-}")"
+    local resolved_base
+    if ! resolved_base="$(resolve_comfy_base "${COMFY_BASE:-}")"; then
+        return 1
+    fi
+    COMFY_BASE="$resolved_base"
     MODELS="$COMFY_BASE/models"
     CUSTOM_NODES="$COMFY_BASE/custom_nodes"
     export COMFY_BASE MODELS CUSTOM_NODES REQUIRED_SPACE_GB DISABLE_SSL_VERIFY DRY_RUN
@@ -1251,4 +1443,4 @@ install_requirements() {
     return 0
 }
 
-export -f redact_url resolve_config_value consolidate_comfy_dirs resolve_comfy_base ensure_tool_installed init_runtime_env log_event check_disk_space verify_model_file_internal verify_model_file update_source_health manage_part_metadata exec_download_tool check_url_alive generate_mirror_urls download_model_smart clone_or_pull install_requirements 2>/dev/null || true
+export -f is_valid_comfyui_dir detect_running_comfyui discover_comfyui_candidates redact_url resolve_config_value consolidate_comfy_dirs resolve_comfy_base ensure_tool_installed init_runtime_env log_event check_disk_space verify_model_file_internal verify_model_file update_source_health manage_part_metadata exec_download_tool check_url_alive generate_mirror_urls download_model_smart clone_or_pull install_requirements 2>/dev/null || true

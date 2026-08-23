@@ -82,8 +82,10 @@ main_nodes() {
     run_stage_06 "$@" || return 1
 
     echo -e "\n${GREEN}====================================================${NC}"
-    echo -e "${GREEN}✅ ĐÃ CÀI XONG COMFYUI & TOÀN BỘ CUSTOM NODES!      ${NC}"
-    echo -e "${YELLOW}💡 Đang tự động bật ComfyUI qua reload.sh...         ${NC}"
+    echo -e "${GREEN}✅ Custom Nodes installed.                          ${NC}"
+    echo -e "${YELLOW}🔄 Restart your GPU/POD once.                       ${NC}"
+    echo -e "${CYAN}➡️  After restart run:                               ${NC}"
+    echo -e "   ${GREEN}bash install_models.sh${NC}"
     echo -e "${GREEN}====================================================${NC}\n"
 
     chmod +x "$SCRIPT_DIR/reload.sh" 2>/dev/null || true
