@@ -28,8 +28,13 @@ install.sh (Entry point)
 
 ## 4. Trạng Thái Release
 - **Remote**: `git@github.com:hung187/comfyui-setup1.git` (branch `main`)
+- **HEAD Commit**: `10e32e69c88b34afa55cdc4d24074d534fd0cbe4` (`fix: harden two-stage GPU setup and runtime safety`)
 - **Remote CI**: GitHub Actions Quality Gate — **PASS (100% Success)**
-- **Regression Tests**: 9/9 Groups PASS, 34/34 Scenarios PASS, 105/105 Assertions PASS.
-- **SHA256 Authoritative Coverage**: 30/42 models verified via first-party metadata APIs (`docs/MODEL_HASH_PROVENANCE.md`).
-- **Effective Fallback Matrix**: `docs/MODEL_SOURCE_COVERAGE.md`.
-- **Preflight Mode**: `./install.sh --validate` (Read-only, zero filesystem mutations).
+- **Regression Tests**: 11/11 Groups PASS, 39/39 Scenarios PASS, 113/113 Assertions PASS.
+- **Production Safety**:
+  - Two-Stage GPU Pod Workflow (`install_nodes.sh` -> Pod restart -> `install_models.sh`).
+  - Zero-Secret Persistence Canary Verified.
+  - Strict HTTPS-only in production with test-only loopback HTTP gate.
+  - Strict Provider Path Auto-Discovery with fail-closed ambiguity & non-existent checks.
+  - Local default for `reload.sh` (opt-in `--tunnel` only).
+- **Preflight Mode**: `./install.sh --validate`, `./install_nodes.sh --validate`, `./install_models.sh --validate` (Read-only, zero filesystem mutations).
