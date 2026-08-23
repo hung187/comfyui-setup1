@@ -1,10 +1,15 @@
 #!/bin/bash
+# ==============================================================================
+# THƯ VIỆN DÙNG CHUNG (CORE UTILITIES) CHO COMFYUI SETUP PIPELINE
+# Chứa toàn bộ các hàm dùng lại: Quản lý môi trường, Downloader, Mã hóa Token,
+# Quản lý đĩa cứng, Resume Range, Liveness Probing, Verify Integrity & Logging.
+# ==============================================================================
 
 if [ "${COMFY_COMMON_SH_LOADED:-}" = "1" ]; then
-    return 0
+    return 0 2>/dev/null || exit 0
 fi
 export COMFY_COMMON_SH_LOADED=1
-export COMFY_COMMON_SH_VERSION="1"
+export COMFY_COMMON_SH_VERSION="2"
 
 set +e
 export LC_ALL=C
@@ -16,6 +21,7 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
+WHITE='\033[1;37m'
 NC='\033[0m'
 
 # Source validation module
@@ -29,10 +35,11 @@ fi
 # Default global configurations
 REQUIRED_SPACE_GB="${REQUIRED_SPACE_GB:-10}"
 USER_AGENT="${USER_AGENT:-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36}"
-MAX_RETRIES="${MAX_RETRIES:-5}"
+MAX_RETRIES="${MAX_RETRIES:-3}"
 TIMEOUT="${TIMEOUT:-60}"
 DISABLE_SSL_VERIFY="${DISABLE_SSL_VERIFY:-0}"
 DRY_RUN="${DRY_RUN:-0}"
+UPDATE_EXISTING="${UPDATE_EXISTING:-0}"
 WGET_SSL_OPT=""
 CURL_SSL_OPT=""
 ARIA2_SSL_OPT=""
@@ -49,7 +56,6 @@ START_TIME="${START_TIME:-$(date +%s)}"
 CURRENT=0
 TOTAL=0
 
-declare -a MODEL_LIST=()
 declare -a AUTO_INSTALLED_TOOLS=()
 declare -a FAILED_FILES=()
 declare -a MIRROR_FILES=()
@@ -64,14 +70,92 @@ redact_url() {
     echo "$raw_url" | sed -E 's/([?&](token|api_key|apikey|key|authorization|access_token|auth|secret|signature|Signature)=)[^&[:space:]]+/\1***/g'
 }
 
-# Format config strings
+# Calculate canonical safe source fingerprint (SHA256 of credential-stripped URL)
+canonical_source_id() {
+    local raw_url="$1"
+    python3 - "$raw_url" <<'PY_CID'
+import sys, urllib.parse, hashlib, re
+
+raw_url = sys.argv[1] if len(sys.argv) > 1 else ""
+if not raw_url:
+    print("")
+    sys.exit(0)
+
+try:
+    parsed = urllib.parse.urlparse(raw_url)
+    qs = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+    # Filter out sensitive credentials
+    safe_qs = []
+    for k, v in qs:
+        k_lower = k.lower()
+        if k_lower in ('token', 'api_key', 'apikey', 'key', 'authorization', 'access_token', 'auth', 'secret', 'signature'):
+            continue
+        safe_qs.append((k, v))
+    safe_query = urllib.parse.urlencode(sorted(safe_qs))
+    canonical_url = urllib.parse.urlunparse((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path, parsed.params, safe_query, ""))
+    cid = hashlib.sha256(canonical_url.encode('utf-8')).hexdigest()
+    print(cid)
+except Exception:
+    print(hashlib.sha256(raw_url.encode('utf-8')).hexdigest())
+PY_CID
+}
+
+# Resolve placeholders like $MODELS, $CUSTOM_NODES, $COMFY_BASE in strings
 resolve_config_value() {
     local value="$1"
     value="${value//\$COMFY_BASE/$COMFY_BASE}"
     value="${value//\$MODELS/$MODELS}"
     value="${value//\$CUSTOM_NODES/$CUSTOM_NODES}"
     value="${value//\$ENCODED_TOKEN/${ENCODED_TOKEN:-}}"
+    value="${value//\$CIVITAI_TOKEN/${CIVITAI_TOKEN:-}}"
     printf '%s' "$value"
+}
+
+# Reusable Civitai Credential Preparation Helper
+prepare_civitai_credentials() {
+    if [ -n "${CIVITAI_TOKEN:-}" ]; then
+        local raw_token="${CIVITAI_TOKEN#\?}"
+        raw_token="${raw_token#token=}"
+        raw_token="${raw_token#&token=}"
+        raw_token="$(echo -n "$raw_token" | tr -d '[:space:]')"
+
+        if command -v jq &>/dev/null; then
+            ENCODED_TOKEN=$(printf '%s' "$raw_token" | jq -sRr @uri)
+        else
+            ENCODED_TOKEN=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$raw_token" 2>/dev/null || echo "$raw_token")
+        fi
+        export CIVITAI_TOKEN="$raw_token"
+        export ENCODED_TOKEN="$ENCODED_TOKEN"
+        echo -e "   ${GREEN}🔑 Civitai Token: SET${NC}"
+        return 0
+    fi
+
+    # Interactive prompt only if terminal is attached
+    if [ -t 0 ]; then
+        echo -e "\n${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║${NC}   ${MAGENTA}🔑 CẤU HÌNH CIVITAI API TOKEN (ĐỂ TẢI MODEL NSFW/EARLY)${NC}    ${YELLOW}║${NC}"
+        echo -e "${YELLOW}╠══════════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${YELLOW}║${NC}  Một số Checkpoints/LoRA yêu cầu Token Civitai để tải:       ${YELLOW}║${NC}"
+        echo -e "${YELLOW}║${NC}  Lấy token tại: ${CYAN}https://civitai.com/user/account${NC}               ${YELLOW}║${NC}"
+        echo -e "${YELLOW}║${NC}  👉 Nhập Token và nhấn [ENTER].                              ${YELLOW}║${NC}"
+        echo -e "${YELLOW}║${NC}  👉 Bỏ trống / Nhấn [ENTER] ngay để bỏ qua (tải link phụ).    ${YELLOW}║${NC}"
+        echo -e "${YELLOW}║${NC}  ⏱️  Tự động bỏ qua sau 5 phút nếu không có phản hồi.         ${YELLOW}║${NC}"
+        echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
+
+        local user_input=""
+        read -r -t 300 -p "🔑 Nhập Civitai API Token: " user_input || true
+        echo ""
+        if [ -n "$user_input" ]; then
+            CIVITAI_TOKEN="$user_input"
+            prepare_civitai_credentials
+            return 0
+        fi
+    fi
+
+    ENCODED_TOKEN=""
+    export ENCODED_TOKEN=""
+    echo -e "   ${YELLOW}ℹ️  Civitai Token: NOT SET (sử dụng link mirror phụ khi cần)${NC}"
+    return 0
 }
 
 # Standalone Python helper for safe ComfyUI folder consolidation (audited for zero data loss)
@@ -79,7 +163,6 @@ consolidate_comfy_dirs() {
     local src_base="$1"
     local dst_base="$2"
 
-    # Pre-check safe paths
     if ! validate_safe_path "$src_base" 2>/dev/null || ! validate_safe_path "$dst_base" 2>/dev/null; then
         echo -e "${RED}❌ consolidate_comfy_dirs: Đường dẫn không an toàn hoặc chứa root hệ thống!${NC}" >&2
         return 1
@@ -109,7 +192,6 @@ def get_sha256(filepath):
 quarantine_dir = os.path.join(dst_base, 'preserve_quarantine')
 managed_subdirs = {'models', 'custom_nodes', 'output'}
 
-# 1. Inventory all items in source directory
 all_src_files = []
 for root, dirs, files in os.walk(src_base, followlinks=False):
     for f in files:
@@ -121,7 +203,6 @@ for root, dirs, files in os.walk(src_base, followlinks=False):
 
 verified_migrated = set()
 
-# 2. Migrate recognized managed folders
 for s in managed_subdirs:
     src_sub = os.path.join(src_base, s)
     dst_sub = os.path.join(dst_base, s)
@@ -156,7 +237,6 @@ for s in managed_subdirs:
                 if src_hash and src_hash == dst_hash:
                     verified_migrated.add(src_file)
                 else:
-                    # Conflict: preserve into quarantine
                     src_hash_str = src_hash or 'unknown'
                     q_target = os.path.join(quarantine_dir, s, rel) if rel != '.' else os.path.join(quarantine_dir, s)
                     os.makedirs(q_target, exist_ok=True)
@@ -171,14 +251,12 @@ for s in managed_subdirs:
                     if src_hash == q_hash:
                         verified_migrated.add(src_file)
 
-# 3. Preserve any unclassified / extra user files and directories (input/, user/, workflows, etc.)
 for root, dirs, files in os.walk(src_base, followlinks=False):
     rel_root = os.path.relpath(root, src_base)
     top_dir = rel_root.split(os.sep)[0] if rel_root != '.' else '.'
     if top_dir in managed_subdirs:
         continue
 
-    # Unmanaged directory or top-level file
     target_q_dir = os.path.join(quarantine_dir, 'unclassified_secondary', rel_root) if rel_root != '.' else os.path.join(quarantine_dir, 'unclassified_secondary')
     os.makedirs(target_q_dir, exist_ok=True)
 
@@ -199,12 +277,9 @@ for root, dirs, files in os.walk(src_base, followlinks=False):
         if src_hash == dst_hash:
             verified_migrated.add(src_file)
 
-# 4. Final verification: Check that 100% of source files were verified
 unaccounted = [f for f in all_src_files if f not in verified_migrated]
 if unaccounted:
     print(f"ERROR: {len(unaccounted)} files failed migration verification!", file=sys.stderr)
-    for u in unaccounted[:5]:
-        print(f"  Unaccounted: {u}", file=sys.stderr)
     sys.exit(1)
 
 print("SUCCESS: 100% of files verified and preserved.")
@@ -212,7 +287,7 @@ sys.exit(0)
 PY_CONSOLIDATE
 }
 
-# Verify if a directory is a valid ComfyUI installation (has main.py and secondary structural markers)
+# Verify if a directory is a valid ComfyUI installation (has main.py and strong structural markers)
 is_valid_comfyui_dir() {
     local target="${1:-}"
     [ -z "$target" ] && return 1
@@ -221,7 +296,6 @@ is_valid_comfyui_dir() {
     real_dir=$(readlink -f "$target" 2>/dev/null || realpath "$target" 2>/dev/null || echo "$target")
     [ ! -d "$real_dir" ] && return 1
 
-    # Must not be a dangerous system root
     local dangerous_roots=("/" "/root" "/workspace" "/app" "/content" "/home" "/etc" "/var" "/usr" "/bin" "/sbin" "/tmp" "/kaggle/working" "/opt" "/data" "/mnt")
     for dr in "${dangerous_roots[@]}"; do
         if [ "$real_dir" = "$dr" ]; then
@@ -229,18 +303,10 @@ is_valid_comfyui_dir() {
         fi
     done
 
-    # Must have main.py
     [ ! -f "$real_dir/main.py" ] && return 1
 
-    # Must have strong ComfyUI secondary structural markers
+    # Require strong structural markers: comfy package, folder_paths.py, execution.py, or nodes.py
     if [ -d "$real_dir/comfy" ] || [ -f "$real_dir/folder_paths.py" ] || [ -f "$real_dir/execution.py" ] || [ -f "$real_dir/nodes.py" ]; then
-        return 0
-    fi
-
-    # Or named ComfyUI/comfyui with models or custom_nodes folder
-    local bname
-    bname=$(basename "$real_dir" | tr '[:upper:]' '[:lower:]')
-    if [[ "$bname" == *"comfy"* ]] && { [ -d "$real_dir/models" ] || [ -d "$real_dir/custom_nodes" ]; }; then
         return 0
     fi
 
@@ -263,9 +329,6 @@ def check_dir(p):
         os.path.isfile(os.path.join(p, "execution.py")) or
         os.path.isfile(os.path.join(p, "nodes.py"))
     ):
-        return True
-    bname = os.path.basename(p).lower()
-    if 'comfy' in bname and (os.path.isdir(os.path.join(p, "models")) or os.path.isdir(os.path.join(p, "custom_nodes"))):
         return True
     return False
 
@@ -378,13 +441,6 @@ discover_comfyui_candidates() {
         done
     fi
 
-    # Check /tmp subdirectories if existing (for provider-like fixtures)
-    for tmp_sub in /tmp/*; do
-        if [ -d "$tmp_sub" ] && [ ! -L "$tmp_sub" ]; then
-            scan_roots+=("$tmp_sub")
-        fi
-    done
-
     for root in "${scan_roots[@]}"; do
         [ ! -d "$root" ] || [ ! -r "$root" ] && continue
         while IFS= read -r fmain; do
@@ -418,9 +474,12 @@ resolve_comfy_base() {
         local real_cli
         real_cli=$(readlink -f "$candidate_cli" 2>/dev/null || echo "$candidate_cli")
         if ! validate_safe_path "$real_cli" 2>/dev/null; then
-            echo -e "${RED}⚠️  Đường dẫn CLI --comfy-dir không an toàn ($candidate_cli), fallback về $HOME/ComfyUI${NC}" >&2
-            printf '%s\n' "$HOME/ComfyUI"
-            return 0
+            echo -e "${RED}❌ Đường dẫn CLI --comfy-dir không an toàn hoặc không hợp lệ: $candidate_cli${NC}" >&2
+            return 1
+        fi
+        if [ "$allow_fresh" -eq 0 ] && [ ! -d "$real_cli" ]; then
+            echo -e "${RED}❌ Thư mục ComfyUI chỉ định không tồn tại: $real_cli${NC}" >&2
+            return 1
         fi
         printf '%s\n' "$real_cli"
         return 0
@@ -442,9 +501,12 @@ resolve_comfy_base() {
         local real_env
         real_env=$(readlink -f "$env_val" 2>/dev/null || echo "$env_val")
         if ! validate_safe_path "$real_env" 2>/dev/null; then
-            echo -e "${RED}⚠️  Đường dẫn biến môi trường không an toàn ($env_val), fallback về $HOME/ComfyUI${NC}" >&2
-            printf '%s\n' "$HOME/ComfyUI"
-            return 0
+            echo -e "${RED}❌ Đường dẫn biến môi trường không an toàn hoặc không hợp lệ: $env_val${NC}" >&2
+            return 1
+        fi
+        if [ "$allow_fresh" -eq 0 ] && [ ! -d "$real_env" ]; then
+            echo -e "${RED}❌ Thư mục ComfyUI từ biến môi trường không tồn tại: $real_env${NC}" >&2
+            return 1
         fi
         printf '%s\n' "$real_env"
         return 0
@@ -509,6 +571,11 @@ resolve_comfy_base() {
     fi
 
     # ── Case D: Zero candidates found (0) ─────────────────────────────────
+    if [ "$allow_fresh" -eq 0 ]; then
+        echo -e "${RED}❌ Existing ComfyUI installation not found. Nothing was created.${NC}" >&2
+        return 1
+    fi
+
     echo -e "${YELLOW}💡 EXISTING COMFYUI NOT FOUND${NC}" >&2
 
     local default_target=""
@@ -523,12 +590,7 @@ resolve_comfy_base() {
     fi
 
     default_target=$(readlink -f "$default_target" 2>/dev/null || echo "$default_target")
-
-    if [ "$allow_fresh" -eq 1 ]; then
-        echo -e "📦 Fresh installation will be used: ${GREEN}YES${NC} (Target: $default_target)" >&2
-    else
-        echo -e "📦 Fresh installation will be used: ${YELLOW}NO${NC} (Default target: $default_target)" >&2
-    fi
+    echo -e "📦 Fresh installation will be used: ${GREEN}YES${NC} (Target: $default_target)" >&2
     printf '%s\n' "$default_target"
     return 0
 }
@@ -545,7 +607,6 @@ ensure_tool_installed() {
 
     echo -e "   ${YELLOW}⚠️  Thiếu công cụ '$tool', đang tự động tải & cài đặt...${NC}"
 
-    # Try apt-get if available
     if command -v apt-get &>/dev/null; then
         local SUDO=""
         if [ "$(id -u)" -ne 0 ] && command -v sudo &>/dev/null; then
@@ -559,12 +620,10 @@ ensure_tool_installed() {
         fi
     fi
 
-    # Try python pip if applicable
     if [ "$tool" = "jq" ] && command -v pip3 &>/dev/null; then
         pip3 install --quiet jq 2>/dev/null || true
     fi
 
-    # Re-check after installation attempt
     if command -v "$tool" &>/dev/null; then
         echo -e "   ${GREEN}✅ Công cụ '$tool' đã sẵn sàng!${NC}"
         AUTO_INSTALLED_TOOLS+=("$tool")
@@ -577,15 +636,19 @@ ensure_tool_installed() {
 
 # Initialize environment paths and flags
 init_runtime_env() {
+    local policy="${1:-allow-fresh}"
     export LC_ALL=C
+    local allow_f=1
+    [ "$policy" = "require-existing" ] && allow_f=0
+
     local resolved_base
-    if ! resolved_base="$(resolve_comfy_base "${COMFY_BASE:-}")"; then
+    if ! resolved_base="$(resolve_comfy_base "${COMFY_BASE:-}" "$allow_f")"; then
         return 1
     fi
     COMFY_BASE="$resolved_base"
     MODELS="$COMFY_BASE/models"
     CUSTOM_NODES="$COMFY_BASE/custom_nodes"
-    export COMFY_BASE MODELS CUSTOM_NODES REQUIRED_SPACE_GB DISABLE_SSL_VERIFY DRY_RUN
+    export COMFY_BASE MODELS CUSTOM_NODES REQUIRED_SPACE_GB DISABLE_SSL_VERIFY DRY_RUN UPDATE_EXISTING
 
     if [ "$DISABLE_SSL_VERIFY" = "1" ]; then
         WGET_SSL_OPT="--no-check-certificate"
@@ -595,7 +658,6 @@ init_runtime_env() {
         GIT_SSL_ENV="GIT_SSL_NO_VERIFY=true"
     fi
 
-    # Auto-detect Python executable with ComfyUI virtualenv priority
     if [ -x "$COMFY_BASE/venv/bin/python" ]; then
         PYTHON_CMD="$COMFY_BASE/venv/bin/python"
     elif [ -x "$COMFY_BASE/.venv/bin/python" ]; then
@@ -614,22 +676,13 @@ init_runtime_env() {
 
     mkdir -p "$COMFY_BASE" "$MODELS" "$CUSTOM_NODES"
 
-    if [ -z "$LOG_FILE" ]; then
-        LOG_FILE="$COMFY_BASE/setup_log.txt"
-    fi
-    if [ -z "$FAILED_LOG_FILE" ]; then
-        FAILED_LOG_FILE="$COMFY_BASE/failed_downloads.log"
-    fi
-    if [ -z "$MANIFEST_FILE" ]; then
-        MANIFEST_FILE="$COMFY_BASE/manifest.json"
-    fi
-    if [ -z "$REPORT_FILE" ]; then
-        REPORT_FILE="$COMFY_BASE/SETUP_REPORT.md"
-    fi
-    if [ -z "$REPORT_JSON" ]; then
-        REPORT_JSON="$COMFY_BASE/setup_report.json"
-    fi
+    [ -z "${LOG_FILE:-}" ] && LOG_FILE="$COMFY_BASE/setup_log.txt"
+    [ -z "${FAILED_LOG_FILE:-}" ] && FAILED_LOG_FILE="$COMFY_BASE/failed_downloads.log"
+    [ -z "${MANIFEST_FILE:-}" ] && MANIFEST_FILE="$COMFY_BASE/manifest.json"
+    [ -z "${REPORT_FILE:-}" ] && REPORT_FILE="$COMFY_BASE/SETUP_REPORT.md"
+    [ -z "${REPORT_JSON:-}" ] && REPORT_JSON="$COMFY_BASE/setup_report.json"
 
+    export LOG_FILE FAILED_LOG_FILE MANIFEST_FILE REPORT_FILE REPORT_JSON
     return 0
 }
 
@@ -665,7 +718,7 @@ check_disk_space() {
     fi
 }
 
-# Standalone Python model file validator (validates tensor offsets & handles SHA256 reliably)
+# Standalone Python model file validator with strict structural integrity and authoritative SHA256 enforcement
 verify_model_file_internal() {
     local file_path="$1"
     local expected_sha256="${2:-}"
@@ -682,14 +735,13 @@ try:
         sys.exit(0)
 
     file_size = os.path.getsize(filepath)
-    if not expected_sha and file_size < 100000:
+    if file_size == 0:
         print("0")
         sys.exit(0)
 
     with open(filepath, 'rb') as f:
         head = f.read(4096)
 
-    # 1. HTML / XML / JSON Error page detection
     head_lower = head[:1024].lower().strip()
     if (head_lower.startswith(b'<html') or
         head_lower.startswith(b'<!doctype') or
@@ -706,8 +758,8 @@ try:
 
     is_safetensors = filepath.endswith('.safetensors') or filepath.endswith('.safetensors.part')
 
-    # 2. Safetensors validation: uint64 header size + JSON parse + Tensor Offset Body Boundary Check
-    if is_safetensors or (len(head) >= 8 and not head.startswith(b'PK') and not head.startswith(b'GGUF')):
+    # 1. Safetensors validation: uint64 header size + JSON parse + Tensor Offset Body Boundary Check
+    if is_safetensors or (len(head) >= 8 and not head.startswith(b'PK') and not head.startswith(b'GGUF') and not head.startswith(b'\x80')):
         header_len = int.from_bytes(head[:8], 'little')
         if 0 < header_len < 100000000 and (8 + header_len) <= file_size:
             with open(filepath, 'rb') as f:
@@ -716,30 +768,42 @@ try:
                 try:
                     meta = json.loads(json_bytes.decode('utf-8'))
                     if isinstance(meta, dict) and len(meta) > 0:
-                        # Strict validation of tensor offsets against actual file size
                         body_start = 8 + header_len
                         has_tensors = False
+                        offset_ranges = []
+                        valid = True
                         for k, v in meta.items():
                             if k == '__metadata__':
                                 continue
-                            if isinstance(v, dict) and 'data_offsets' in v:
-                                offsets = v['data_offsets']
-                                if not isinstance(offsets, list) or len(offsets) != 2:
-                                    print("0")
-                                    sys.exit(0)
-                                start_off, end_off = offsets[0], offsets[1]
-                                if not (0 <= start_off <= end_off):
-                                    print("0")
-                                    sys.exit(0)
-                                if (body_start + end_off) > file_size:
-                                    # Truncated tensor body!
-                                    print("0")
-                                    sys.exit(0)
-                                has_tensors = True
-                        if not has_tensors and '__metadata__' not in meta:
+                            if not isinstance(v, dict):
+                                valid = False
+                                break
+                            if 'dtype' not in v or not isinstance(v['dtype'], str):
+                                valid = False
+                                break
+                            if 'shape' not in v or not isinstance(v['shape'], list) or not all(isinstance(x, int) and x >= 0 for x in v['shape']):
+                                valid = False
+                                break
+                            if 'data_offsets' not in v or not isinstance(v['data_offsets'], list) or len(v['data_offsets']) != 2:
+                                valid = False
+                                break
+                            start_off, end_off = v['data_offsets']
+                            if not isinstance(start_off, int) or not isinstance(end_off, int):
+                                valid = False
+                                break
+                            if not (0 <= start_off <= end_off):
+                                valid = False
+                                break
+                            if (body_start + end_off) > file_size:
+                                valid = False
+                                break
+                            offset_ranges.append((start_off, end_off))
+                            has_tensors = True
+
+                        if not valid or not has_tensors:
                             print("0")
                             sys.exit(0)
-                        # Passed safetensors structural integrity check
+
                         if expected_sha:
                             h = hashlib.sha256()
                             with open(filepath, 'rb') as vf:
@@ -756,20 +820,7 @@ try:
                         print("0")
                         sys.exit(0)
 
-    # 3. PyTorch Zip / Pickle validation (.ckpt, .pt, .pth, .bin)
-    if head.startswith(b'PK\x03\x04') or head.startswith(b'\x80\x02') or head.startswith(b'BIN'):
-        if expected_sha:
-            h = hashlib.sha256()
-            with open(filepath, 'rb') as vf:
-                while chunk := vf.read(1048576):
-                    h.update(chunk)
-            if h.hexdigest().lower() != expected_sha:
-                print("0")
-                sys.exit(0)
-        print("1")
-        sys.exit(0)
-
-    # 4. GGUF format validation (.gguf)
+    # 2. GGUF format validation (.gguf)
     if head.startswith(b'GGUF'):
         if expected_sha:
             h = hashlib.sha256()
@@ -782,12 +833,7 @@ try:
         print("1")
         sys.exit(0)
 
-    # 5. If it claims to be safetensors but reached here -> REJECT immediately!
-    if is_safetensors:
-        print("0")
-        sys.exit(0)
-
-    # 6. Generic binary validation ONLY allowed if expected_sha is provided and matches
+    # 3. PyTorch Zip / Pickle / .pth / .pt / Generic binary REQUIRE AUTHORITATIVE SHA256
     if expected_sha:
         h = hashlib.sha256()
         with open(filepath, 'rb') as vf:
@@ -796,8 +842,11 @@ try:
         if h.hexdigest().lower() == expected_sha:
             print("1")
             sys.exit(0)
+        else:
+            print("0")
+            sys.exit(0)
 
-    # Unrecognized format without expected SHA is REJECTED
+    # All other binaries without authoritative expected_sha are REJECTED
     print("0")
 except Exception:
     print("0")
@@ -821,7 +870,7 @@ verify_model_file() {
     fi
 }
 
-# Update source health score dynamically (POSIX concurrency-safe with fcntl.flock + Token Redaction + Exact Domain Check)
+# Update source health score with auto-expiring flock and zero credential persistence
 update_source_health() {
     local url="$1"
     local status="$2"
@@ -842,10 +891,16 @@ except Exception:
 if not hostname:
     sys.exit(0)
 
-clean_domain = re.sub(r'([?&](token|api_key|apikey|key|authorization|access_token|auth|secret|signature)=)[^&]+', r'\1***', hostname)
-
 lock_file = health_file + '.lock'
 os.makedirs(os.path.dirname(health_file), exist_ok=True)
+
+# Auto-clean stale locks older than 10 seconds
+if os.path.exists(lock_file):
+    try:
+        if time.time() - os.path.getmtime(lock_file) > 10:
+            os.remove(lock_file)
+    except Exception:
+        pass
 
 try:
     with open(lock_file, 'w') as lock_f:
@@ -859,17 +914,7 @@ try:
                 except Exception:
                     data = {}
 
-            entry = data.get(clean_domain, {'success': 0, 'fails': 0, 'health_score': 100})
-
-            # Exact domain and validated subdomain boundary trust check
-            if (hostname == 'civitai.com' or hostname.endswith('.civitai.com') or
-                hostname == 'huggingface.co' or hostname.endswith('.huggingface.co') or hostname.endswith('.hf.co') or
-                hostname == 'github.com' or hostname.endswith('.github.com') or hostname.endswith('.githubusercontent.com')):
-                entry['trust_tier'] = 100
-            elif hostname == 'hf-mirror.com' or hostname.endswith('.hf-mirror.com') or hostname == 'ghproxy.net' or hostname.endswith('.ghproxy.net'):
-                entry['trust_tier'] = 85
-            else:
-                entry['trust_tier'] = 75
+            entry = data.get(hostname, {'success': 0, 'fails': 0, 'health_score': 100})
 
             if status == 'ok':
                 entry['success'] = entry.get('success', 0) + 1
@@ -880,16 +925,13 @@ try:
             elif status == '429':
                 entry['fails'] = entry.get('fails', 0) + 1
                 entry['health_score'] = max(0, entry.get('health_score', 100) - 15)
-            elif status == 'corrupted':
-                entry['fails'] = entry.get('fails', 0) + 1
-                entry['health_score'] = max(0, entry.get('health_score', 100) - 60)
             else:
                 entry['fails'] = entry.get('fails', 0) + 1
                 entry['health_score'] = max(0, entry.get('health_score', 100) - 20)
 
             entry['last_status'] = status
             entry['updated_at'] = int(time.time())
-            data[clean_domain] = entry
+            data[hostname] = entry
 
             tmp_file = f"{health_file}.tmp.{os.getpid()}_{time.time_ns()}"
             with open(tmp_file, 'w') as f:
@@ -904,7 +946,7 @@ except Exception:
 PY_HEALTH
 }
 
-# Cross-source .part contamination prevention via sidecar metadata
+# Cross-source .part contamination prevention via sidecar metadata (Zero Secret Storage)
 manage_part_metadata() {
     local url="$1"
     local part_file="$2"
@@ -913,42 +955,60 @@ manage_part_metadata() {
     local meta_file="${part_file}.meta.json"
 
     python3 - "$url" "$part_file" "$expected_sha256" "$action" "$meta_file" <<'PY_PART_META'
-import sys, os, json, time, re
+import sys, os, json, time, re, shutil, urllib.parse, hashlib
 
 url, part_file, expected_sha, action, meta_file = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
-clean_url = re.sub(r'([?&](token|api_key|apikey|key|authorization|access_token|auth|secret|signature)=)[^&]+', r'\1***', url)
+
+def get_source_id(u):
+    try:
+        parsed = urllib.parse.urlparse(u)
+        qs = [q for q in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True) if q[0].lower() not in ('token', 'api_key', 'apikey', 'key', 'auth', 'secret', 'signature', 'authorization')]
+        canonical = urllib.parse.urlunparse((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path, parsed.params, urllib.parse.urlencode(sorted(qs)), ""))
+        return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+    except Exception:
+        return hashlib.sha256(u.encode('utf-8')).hexdigest()
+
+current_source_id = get_source_id(url)
+redacted_url = re.sub(r'([?&](token|api_key|apikey|key|authorization|access_token|auth|secret|signature)=)[^&]+', r'\1***', url)
 
 if action == 'check':
     if os.path.exists(part_file) and os.path.exists(meta_file):
         try:
             with open(meta_file, 'r') as f:
                 meta = json.load(f)
-            meta_url = meta.get('source_url', '')
-            meta_sha = meta.get('expected_sha256', '')
-            # If same source URL OR verified identical expected_sha256 -> Safe to resume
-            if meta_url == clean_url or (expected_sha and meta_sha and meta_sha.lower() == expected_sha.lower()):
+            saved_sid = meta.get('source_id', '')
+            saved_sha = meta.get('expected_sha256', '')
+
+            # Match source_id OR verified expected_sha256
+            if (saved_sid and saved_sid == current_source_id) or (expected_sha and saved_sha and saved_sha.lower() == expected_sha.lower()):
                 print("RESUME_OK")
                 sys.exit(0)
             else:
-                # Cross-source mismatch! Quarantine old part file to avoid contamination
+                # Quarantine foreign part and clean aria2 control files
                 timestamp = int(time.time())
-                q_part = f"{part_file}.cross_source_quarantine_{timestamp}"
+                q_dir = os.path.join(os.path.dirname(part_file), "preserve_quarantine")
+                os.makedirs(q_dir, exist_ok=True)
+                q_part = os.path.join(q_dir, f"quarantine_{timestamp}_{os.path.basename(part_file)}")
                 try:
-                    os.replace(part_file, q_part)
+                    shutil.move(part_file, q_part)
                 except Exception:
                     pass
+                aria2_file = f"{part_file}.aria2"
+                if os.path.exists(aria2_file):
+                    try: os.remove(aria2_file)
+                    except Exception: pass
                 print("RESET_DIFFERENT_SOURCE")
         except Exception:
             print("RESET_CORRUPT_META")
     else:
         print("FRESH_START")
 
-    # Write initial/updated metadata
     try:
         os.makedirs(os.path.dirname(meta_file), exist_ok=True)
         with open(meta_file, 'w') as f:
             json.dump({
-                'source_url': clean_url,
+                'source_id': current_source_id,
+                'source_url': redacted_url,
                 'expected_sha256': expected_sha,
                 'created_at': int(time.time())
             }, f, indent=2)
@@ -963,7 +1023,7 @@ exec_download_tool() {
     local part_file="$2"
     local expected_sha256="${3:-}"
     local user_agent="${USER_AGENT:-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36}"
-    local max_retries="${MAX_RETRIES:-5}"
+    local max_retries="${MAX_RETRIES:-3}"
     local timeout="${TIMEOUT:-60}"
 
     mkdir -p "$(dirname "$part_file")"
@@ -972,65 +1032,11 @@ exec_download_tool() {
     local part_status
     part_status=$(manage_part_metadata "$url" "$part_file" "$expected_sha256" "check")
     if [ "$part_status" = "RESET_DIFFERENT_SOURCE" ]; then
-        echo -e "   ${YELLOW}⚠️  Phát hiện file .part từ nguồn khác không tương thích - Đã reset an toàn để tránh nhiễm byte.${NC}"
+        echo -e "   ${YELLOW}⚠️  Phát hiện file .part từ nguồn khác - Đã cách ly an toàn vào preserve_quarantine/${NC}"
     fi
 
-    # Probe Content-Length / Range support for intelligent concurrency tuning
-    local max_conn_limit="${ARIA2_CONNECTIONS_MAX:-8}"
     local connections=4
     local split=4
-
-    local probed_size
-    probed_size=$(curl -sIL -A "$user_agent" --connect-timeout 5 "$url" 2>/dev/null | grep -i '^content-length:' | tail -n1 | tr -d '\r' | awk '{print $2}' || echo 0)
-
-    if [ -n "$probed_size" ] && [ "$probed_size" -gt 0 ] 2>/dev/null; then
-        if [ "$probed_size" -lt 33554432 ]; then # < 32 MB
-            connections=2
-            split=2
-        elif [ "$probed_size" -lt 268435456 ]; then # 32 MB - 256 MB
-            connections=4
-            split=4
-        else # > 256 MB
-            connections=8
-            split=8
-        fi
-    fi
-
-    # Reduce concurrency if host recently encountered 429 rate limits
-    if [ -f "${COMFY_BASE:-}/source_health.json" ]; then
-        local has_recent_429
-        has_recent_429=$(python3 - "$COMFY_BASE/source_health.json" "$url" <<'PY_CHECK_429' 2>/dev/null || echo "0"
-import sys, json, urllib.parse
-hf, u = sys.argv[1], sys.argv[2]
-try:
-    domain = urllib.parse.urlparse(u).netloc
-    with open(hf) as f:
-        data = json.load(f)
-    entry = data.get(domain, {})
-    print("1" if entry.get("last_status") == "429" else "0")
-except Exception:
-    print("0")
-PY_CHECK_429
-)
-        if [ "$has_recent_429" = "1" ]; then
-            connections=2
-            split=2
-        fi
-    fi
-
-    # Clamp connections to ARIA2_CONNECTIONS_MAX (bounded between 1 and 16)
-    if [ "$connections" -gt "$max_conn_limit" ]; then
-        connections="$max_conn_limit"
-        split="$max_conn_limit"
-    fi
-    if [ "$connections" -gt 16 ]; then
-        connections=16
-        split=16
-    fi
-    if [ "$connections" -lt 1 ]; then
-        connections=1
-        split=1
-    fi
 
     if command -v aria2c &>/dev/null; then
         echo -e "   ${BLUE}⚡ Tải qua aria2c (Resumable + 307 follow)...${NC}"
@@ -1096,7 +1102,6 @@ import sys, os, urllib.request, ssl
 
 url, out, ua, timeout, dis_ssl = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), sys.argv[5]
 
-# TLS Verification enabled by default; only disabled when DISABLE_SSL_VERIFY=1
 if dis_ssl == "1":
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
@@ -1106,9 +1111,8 @@ else:
 
 req = urllib.request.Request(url, headers={'User-Agent': ua})
 
-# Check if resuming partial file
 mode = 'wb'
-headers_range = {}
+cur_size = 0
 if os.path.exists(out):
     cur_size = os.path.getsize(out)
     if cur_size > 0:
@@ -1116,12 +1120,18 @@ if os.path.exists(out):
         mode = 'ab'
 
 with urllib.request.urlopen(req, context=ctx, timeout=timeout) as resp:
-    # If server sent HTTP 200 instead of 206, start fresh to prevent duplicate bytes
-    if resp.status == 200 and mode == 'ab':
+    # Verify Content-Range header if resuming (status 206)
+    if resp.status == 206 and mode == 'ab':
+        cr = resp.headers.get('Content-Range', '')
+        if not cr.startswith(f'bytes {cur_size}-'):
+            # Range mismatch -> reset to fresh download
+            mode = 'wb'
+    elif resp.status == 200:
         mode = 'wb'
+
     with open(out, mode) as f:
         while True:
-            chunk = resp.read(4 * 1024 * 1024) # 4MB chunked streaming
+            chunk = resp.read(4 * 1024 * 1024)
             if not chunk:
                 break
             f.write(chunk)
@@ -1138,19 +1148,30 @@ PY_STREAM
     return 1
 }
 
-# Kiểm tra link còn sống hay không
+# Liveness probe using bounded HEAD or Range: bytes=0-0 (Never unrestricted GET)
 check_url_alive() {
     local url="$1"
     local user_agent="${USER_AGENT:-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36}"
     local http_code=0
 
     if command -v curl &>/dev/null; then
+        # 1. Try lightweight HEAD probe
         http_code=$(curl -s -o /dev/null -w "%{http_code}" \
             --max-time 10 --connect-timeout 8 \
-            -L --head \
+            -L -I \
             ${CURL_SSL_OPT} \
             -A "$user_agent" \
             "$url" 2>/dev/null || echo "0")
+
+        # 2. If server returns 405 (Method Not Allowed) or fails HEAD, fallback to Range 0-0 probe
+        if [ "$http_code" = "405" ] || [ "$http_code" = "0" ] || [ "$http_code" = "400" ]; then
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+                --max-time 10 --connect-timeout 8 \
+                -L -r 0-0 \
+                ${CURL_SSL_OPT} \
+                -A "$user_agent" \
+                "$url" 2>/dev/null || echo "0")
+        fi
     elif command -v wget &>/dev/null; then
         if wget -q --spider --timeout=10 --tries=1 --user-agent="$user_agent" ${WGET_SSL_OPT} "$url" 2>/dev/null; then
             http_code=200
@@ -1186,33 +1207,18 @@ generate_mirror_urls() {
     local mirrors=()
 
     if [ -n "$explicit_alts" ]; then
-        IFS=',' read -ra ALT_ARR <<< "$explicit_alts"
+        IFS='|' read -ra ALT_ARR <<< "$explicit_alts"
         for alt in "${ALT_ARR[@]}"; do
             alt="$(echo -n "$alt" | xargs)"
             if [ -n "$alt" ]; then
-                local alt_trust
-                alt_trust=$(classify_source_trust "$alt")
-                if [ "$alt_trust" != "FORBIDDEN" ]; then
-                    mirrors+=("$alt")
-                fi
+                mirrors+=("$alt")
             fi
         done
     fi
 
-    if [[ "$primary_url" == *"huggingface.co"* ]]; then
+    if [[ "$primary_url" == *"huggingface.co"* ]] && [[ "$primary_url" != *"hf-mirror.com"* ]]; then
         local mirror_hf="${primary_url/huggingface.co/hf-mirror.com}"
-        local short_hf="${primary_url/huggingface.co/hf.co}"
-        mirrors+=("$mirror_hf" "$short_hf")
-    elif [[ "$primary_url" == *"github.com"* ]]; then
-        local gh_proxy1="https://ghproxy.net/$primary_url"
-        local gh_proxy2="https://gh-proxy.com/$primary_url"
-        mirrors+=("$gh_proxy1" "$gh_proxy2")
-    elif [[ "$primary_url" == *"civitai.com"* ]]; then
-        if [[ "$primary_url" == *"&token="* ]] || [[ "$primary_url" == *"?token="* ]]; then
-            local clean_url
-            clean_url=$(echo "$primary_url" | sed 's/[?&]token=[^&]*//g')
-            [ "$clean_url" != "$primary_url" ] && mirrors+=("$clean_url")
-        fi
+        mirrors+=("$mirror_hf")
     fi
 
     printf "%s\n" "${mirrors[@]}"
@@ -1263,7 +1269,7 @@ download_model_smart() {
     if [ -f "$output_path" ]; then
         if verify_model_file "$output_path" "$expected_sha256"; then
             local size_h
-            size_h=$(du -sh "$output_path" | cut -f1)
+            size_h=$(du -sh "$output_path" 2>/dev/null | cut -f1 || echo "OK")
             echo -e "   ${GREEN}⏩ Đã tồn tại hoàn chỉnh (${size_h}), bỏ qua.${NC}"
             log_event "SKIP" "$description | $output_path | $size_h"
             return 0
@@ -1281,11 +1287,36 @@ download_model_smart() {
     fi
 
     # Construct list of candidate URLs: Primary -> Alt Mirror URLs
-    local candidate_urls=("$primary_url")
+    local candidate_urls=()
+    local p_trust
+    p_trust=$(classify_source_trust "$primary_url")
+    if [ "$p_trust" = "THIRD_PARTY_MIRROR" ] && [ -z "$expected_sha256" ]; then
+        echo -e "   ${YELLOW}⚠️  Bỏ qua nguồn chính do là mirror bên thứ ba nhưng thiếu SHA256:${NC} $(redact_url "$primary_url")"
+    else
+        candidate_urls+=("$primary_url")
+    fi
+
     mapfile -t mirrors < <(generate_mirror_urls "$primary_url" "$explicit_alts")
     for m in "${mirrors[@]}"; do
-        [ -n "$m" ] && [ "$m" != "$primary_url" ] && candidate_urls+=("$m")
+        [ -z "$m" ] && continue
+        [ "$m" = "$primary_url" ] && continue
+        if validate_url "$m" 2>/dev/null; then
+            local m_trust
+            m_trust=$(classify_source_trust "$m")
+            if [ "$m_trust" = "THIRD_PARTY_MIRROR" ] && [ -z "$expected_sha256" ]; then
+                echo -e "   ${YELLOW}⚠️  Bỏ qua mirror bên thứ ba (không có SHA256):${NC} $(redact_url "$m")"
+            else
+                candidate_urls+=("$m")
+            fi
+        fi
     done
+
+    if [ ${#candidate_urls[@]} -eq 0 ]; then
+        echo -e "   ${RED}❌ Không có URL nguồn hợp lệ để tải: $description${NC}"
+        log_event "FAIL" "$description | No valid sources remaining"
+        FAILED_FILES+=("$description|$output_path|$(redact_url "$primary_url")|Không có nguồn hợp lệ")
+        return 1
+    fi
 
     local part_file="${output_path}.part"
     local download_success=0
@@ -1298,16 +1329,7 @@ download_model_smart() {
         local display_url
         display_url=$(redact_url "$url")
 
-        # Third-party Mirror Policy: auto-skip unverified 3rd party mirrors without expected SHA256
-        local s_trust
-        s_trust=$(classify_source_trust "$url")
-        if [ "$s_trust" = "THIRD_PARTY_MIRROR" ] && [ -z "$expected_sha256" ]; then
-            echo -e "   ${YELLOW}⚠️  Bỏ qua mirror bên thứ ba chưa được xác thực (không có SHA256 để verify):${NC} $display_url"
-            log_event "SKIP_UNVERIFIED_MIRROR" "$description | $display_url"
-            continue
-        fi
-
-        if [ $attempt_count -eq 1 ]; then
+        if [ $attempt_count -eq 1 ] && [ "$url" = "$primary_url" ]; then
             echo -e "   ${BLUE}🌐 Link chính gốc:${NC} $display_url"
         else
             local alt_idx=$((attempt_count - 1))
@@ -1315,7 +1337,6 @@ download_model_smart() {
             is_mirror=1
         fi
 
-        # === KIỂM TRA LINK CÒN SỐNG TRƯỚC KHI TẢI ===
         echo -ne "   ${CYAN}🔍 Đang kiểm tra link...${NC} "
         if ! check_url_alive "$url"; then
             echo -e "${RED}❌ Link chết / không phản hồi. Bỏ qua, thử link tiếp theo...${NC}"
@@ -1330,18 +1351,17 @@ download_model_smart() {
                 used_url="$url"
                 break
             else
-                echo -e "   ${RED}⚠️  File tạm không vượt qua kiểm tra integrity (có thể lỗi HTML/Redirect/Checksum). Thử nguồn khác...${NC}"
-                rm -f "$part_file" "${part_file}.meta.json"
+                echo -e "   ${RED}⚠️  File tạm không vượt qua kiểm tra integrity. Thử nguồn khác...${NC}"
+                rm -f "$part_file" "${part_file}.meta.json" "${part_file}.aria2"
             fi
         fi
     done
 
     if [ $download_success -eq 1 ] && [ -f "$part_file" ]; then
         mv "$part_file" "$output_path"
-        rm -f "${part_file}.meta.json"
+        rm -f "${part_file}.meta.json" "${part_file}.aria2"
         local size_h
-        size_h=$(du -sh "$output_path" | cut -f1)
-
+        size_h=$(du -sh "$output_path" 2>/dev/null | cut -f1 || echo "OK")
         local display_used_url
         display_used_url=$(redact_url "$used_url")
 
@@ -1358,18 +1378,17 @@ download_model_smart() {
         echo -e "   ${RED}❌ TẢI THẤT BẠI TẤT CẢ NGUỒN (Link chính + Link phụ).${NC}"
         log_event "FAIL" "$description | $output_path | $(redact_url "$primary_url")"
         FAILED_FILES+=("$description|$output_path|$(redact_url "$primary_url")|Tất cả mirror đều lỗi/không phản hồi")
-        rm -f "$part_file" "${part_file}.meta.json"
+        rm -f "$part_file" "${part_file}.meta.json" "${part_file}.aria2"
         return 1
     fi
 }
 
-# Clone or pull git repositories with fallback mirror proxy support
+# Clone or pull git repositories safely (No unverified third-party proxy for executable code)
 clone_or_pull() {
     local repo_url="$1"
     local target_dir="$2"
     local description="$3"
 
-    # === BOUNDARY REVALIDATION (DEFENSE-IN-DEPTH) ===
     if ! validate_safe_path "$target_dir" 2>/dev/null; then
         echo -e "   ${RED}❌ Đường dẫn clone/pull không an toàn: '$target_dir'${NC}"
         return 1
@@ -1390,40 +1409,41 @@ clone_or_pull() {
     fi
 
     if [ -d "$target_dir/.git" ]; then
-        echo -e "   ${YELLOW}🔄 Cập nhật repo (git pull):${NC} $description"
-        (cd "$target_dir" && env ${GIT_SSL_ENV:-} git pull --rebase --quiet) || echo -e "   ${YELLOW}⚠️ Git pull có cảnh báo${NC}"
-        log_event "PULL" "$description | $target_dir"
+        if [ "${UPDATE_EXISTING:-0}" = "1" ]; then
+            echo -e "   ${YELLOW}🔄 Cập nhật repo (git pull):${NC} $description"
+            (cd "$target_dir" && env ${GIT_SSL_ENV:-} git pull --rebase --quiet) || echo -e "   ${YELLOW}⚠️ Git pull có cảnh báo${NC}"
+            log_event "PULL" "$description | $target_dir"
+        else
+            echo -e "   ${GREEN}✅ Đã có sẵn repo (giữ nguyên):${NC} $description"
+        fi
         return 0
     elif [ -d "$target_dir" ]; then
-        echo -e "   ${YELLOW}⚠️  Thư mục tồn tại nhưng không phải git repo, làm sạch và clone lại...${NC}"
-        rm -rf "$target_dir"
+        echo -e "   ${GREEN}✅ Đã có sẵn thư mục:${NC} $description"
+        return 0
     fi
 
     echo -e "   ${BLUE}📦 Clone mới:${NC} $description"
 
-    # Try primary repo URL first
-    if env ${GIT_SSL_ENV:-} git clone --quiet "$repo_url" "$target_dir" 2>/dev/null; then
+    local clone_ok=0
+    for attempt in 1 2 3; do
+        if env ${GIT_SSL_ENV:-} git clone --quiet --depth 1 "$repo_url" "$target_dir" 2>/dev/null; then
+            clone_ok=1
+            break
+        else
+            sleep $((attempt * 2))
+        fi
+    done
+
+    if [ $clone_ok -eq 1 ]; then
         echo -e "   ${GREEN}✅ Clone thành công${NC}"
         log_event "CLONE_OK" "$description | $target_dir"
         return 0
+    else
+        echo -e "   ${RED}❌ Clone thất bại từ GitHub.${NC}"
+        log_event "CLONE_FAIL" "$description | $target_dir"
+        FAILED_FILES+=("$description|$target_dir|$(redact_url "$repo_url")|Git Clone Lỗi")
+        return 1
     fi
-
-    # Try Git Mirror proxy fallback if GitHub
-    if [[ "$repo_url" == *"github.com"* ]]; then
-        local mirror_git="https://ghproxy.net/$repo_url"
-        echo -e "   ${YELLOW}🔄 Clone thất bại, thử git mirror phụ:${NC} $mirror_git"
-        if env ${GIT_SSL_ENV:-} git clone --quiet "$mirror_git" "$target_dir" 2>/dev/null; then
-            echo -e "   ${MAGENTA}✨ Clone thành công qua Git Mirror!${NC}"
-            log_event "CLONE_MIRROR_OK" "$description | $target_dir | $mirror_git"
-            MIRROR_FILES+=("$description|$target_dir|$(redact_url "$repo_url")|$mirror_git|Git Repo")
-            return 0
-        fi
-    fi
-
-    echo -e "   ${RED}❌ Clone thất bại hoàn toàn.${NC}"
-    log_event "CLONE_FAIL" "$description | $target_dir"
-    FAILED_FILES+=("$description|$target_dir|$(redact_url "$repo_url")|Git Clone Lỗi")
-    return 1
 }
 
 install_requirements() {
@@ -1436,11 +1456,15 @@ install_requirements() {
             return 0
         fi
 
-        $PIP_BASE_CMD install -r "$dir/requirements.txt" $PIP_SSL_OPT --break-system-packages >> "$COMFY_BASE/pip_install.log" 2>&1 \
-            || $PIP_BASE_CMD install -r "$dir/requirements.txt" $PIP_SSL_OPT >> "$COMFY_BASE/pip_install.log" 2>&1 \
-            || true
+        if $PIP_BASE_CMD install -r "$dir/requirements.txt" $PIP_SSL_OPT --break-system-packages >> "$COMFY_BASE/pip_install.log" 2>&1 \
+            || $PIP_BASE_CMD install -r "$dir/requirements.txt" $PIP_SSL_OPT >> "$COMFY_BASE/pip_install.log" 2>&1; then
+            return 0
+        else
+            echo -e "   ${RED}❌ Lỗi khi cài đặt requirements cho $(basename "$dir")${NC}"
+            return 1
+        fi
     fi
     return 0
 }
 
-export -f is_valid_comfyui_dir detect_running_comfyui discover_comfyui_candidates redact_url resolve_config_value consolidate_comfy_dirs resolve_comfy_base ensure_tool_installed init_runtime_env log_event check_disk_space verify_model_file_internal verify_model_file update_source_health manage_part_metadata exec_download_tool check_url_alive generate_mirror_urls download_model_smart clone_or_pull install_requirements 2>/dev/null || true
+export -f is_valid_comfyui_dir detect_running_comfyui discover_comfyui_candidates redact_url canonical_source_id resolve_config_value prepare_civitai_credentials consolidate_comfy_dirs resolve_comfy_base ensure_tool_installed init_runtime_env log_event check_disk_space verify_model_file_internal verify_model_file update_source_health manage_part_metadata exec_download_tool check_url_alive generate_mirror_urls download_model_smart clone_or_pull install_requirements 2>/dev/null || true

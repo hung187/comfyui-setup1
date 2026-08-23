@@ -10,6 +10,9 @@ export LC_ALL=C
 
 # Import thư viện dùng chung nếu có
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/scripts/validation.sh" ]; then
+    source "$SCRIPT_DIR/scripts/validation.sh"
+fi
 if [ -f "$SCRIPT_DIR/scripts/common.sh" ]; then
     source "$SCRIPT_DIR/scripts/common.sh"
 fi
@@ -22,7 +25,6 @@ MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Standalone Python dependency analyzer using non-executing importlib.util.find_spec across all node .py files
 scan_node_dependencies() {
     local node_dir="$1"
 
@@ -50,9 +52,7 @@ PKG_MAP = {
     'torchaudio': 'torchaudio'
 }
 
-# Scan all python files in the node directory
 for root, dirs, files in os.walk(node_dir):
-    # Ignore git and cache dirs
     dirs[:] = [d for d in dirs if d not in {'.git', '__pycache__', 'venv', '.venv'}]
     for f in files:
         if f.endswith('.py'):
@@ -76,10 +76,8 @@ unresolved = []
 for mod in sorted(modules_needed):
     if not mod or mod in sys.builtin_module_names:
         continue
-    # Ignore local files/subpackages in the node directory
     if os.path.exists(os.path.join(node_dir, mod + '.py')) or os.path.isdir(os.path.join(node_dir, mod)):
         continue
-    # Non-executing module resolution
     try:
         spec = importlib.util.find_spec(mod)
         if spec is None:
@@ -110,7 +108,10 @@ export -f scan_node_dependencies 2>/dev/null || true
 
 fix_custom_nodes() {
     if declare -f init_runtime_env >/dev/null 2>&1; then
-        init_runtime_env || true
+        init_runtime_env "require-existing" || {
+            echo -e "${RED}❌ Không tìm thấy thư mục ComfyUI có sẵn.${NC}"
+            return 1
+        }
     fi
 
     local custom_nodes_dir="${CUSTOM_NODES:-${COMFY_BASE:-}/custom_nodes}"
@@ -153,13 +154,13 @@ fix_custom_nodes() {
                 local pip_log
                 pip_log=$(mktemp 2>/dev/null || echo "/tmp/pip_fix_$$.log")
 
-                if $PIP_BASE_CMD install -r "$node_dir/requirements.txt" \
-                    $PIP_SSL_OPT \
+                if ${PIP_BASE_CMD:-python3 -m pip} install -r "$node_dir/requirements.txt" \
+                    ${PIP_SSL_OPT:-} \
                     --break-system-packages \
                     --quiet \
                     2>&1 | tee "$pip_log" >/dev/null \
-                   || $PIP_BASE_CMD install -r "$node_dir/requirements.txt" \
-                    $PIP_SSL_OPT \
+                   || ${PIP_BASE_CMD:-python3 -m pip} install -r "$node_dir/requirements.txt" \
+                    ${PIP_SSL_OPT:-} \
                     --quiet \
                     2>&1 | tee "$pip_log" >/dev/null; then
                     echo -e "   ${GREEN}✅ Cài requirements.txt thành công${NC}"
@@ -171,17 +172,17 @@ fix_custom_nodes() {
             fi
         fi
 
-        # ── 2. Cài pyproject.toml / setup.py nếu có (Kiểm tra exit code thật) ──
+        # ── 2. Cài pyproject.toml / setup.py nếu có ──
         if [ -f "$node_dir/pyproject.toml" ] || [ -f "$node_dir/setup.py" ]; then
             echo -e "   ${CYAN}📦 Tìm thấy pyproject.toml/setup.py - Đang cài editable...${NC}"
             if [ "${DRY_RUN:-0}" != "1" ]; then
-                if $PIP_BASE_CMD install -e "$node_dir" \
-                    $PIP_SSL_OPT \
+                if ${PIP_BASE_CMD:-python3 -m pip} install -e "$node_dir" \
+                    ${PIP_SSL_OPT:-} \
                     --break-system-packages \
                     --quiet \
                     2>/dev/null \
-                   || $PIP_BASE_CMD install -e "$node_dir" \
-                    $PIP_SSL_OPT \
+                   || ${PIP_BASE_CMD:-python3 -m pip} install -e "$node_dir" \
+                    ${PIP_SSL_OPT:-} \
                     --quiet \
                     2>/dev/null; then
                     echo -e "   ${GREEN}✅ Cài editable package xong${NC}"
@@ -222,13 +223,13 @@ fix_custom_nodes() {
 
                 echo -ne "   ${YELLOW}🔧 Đang cài đặt '$pkg_name'...${NC} "
                 if [ "${DRY_RUN:-0}" != "1" ]; then
-                    if "$PYTHON_CMD" -m pip install "$pkg_name" \
-                        $PIP_SSL_OPT \
+                    if "${PYTHON_CMD:-python3}" -m pip install "$pkg_name" \
+                        ${PIP_SSL_OPT:-} \
                         --break-system-packages \
                         --quiet \
                         2>/dev/null \
-                       || "$PYTHON_CMD" -m pip install "$pkg_name" \
-                        $PIP_SSL_OPT \
+                       || "${PYTHON_CMD:-python3}" -m pip install "$pkg_name" \
+                        ${PIP_SSL_OPT:-} \
                         --quiet \
                         2>/dev/null; then
                         echo -e "${GREEN}✅ OK${NC}"
@@ -258,12 +259,10 @@ fix_custom_nodes() {
         echo ""
     done
 
-    # ── Dọn dẹp pip cache sau khi sửa ───────────────────────────────────────
     echo -e "${CYAN}🧹 Đang dọn dẹp pip cache để tiết kiệm đĩa...${NC}"
-    $PIP_BASE_CMD cache purge 2>/dev/null || true
+    ${PIP_BASE_CMD:-python3 -m pip} cache purge 2>/dev/null || true
     echo -e "${GREEN}✅ Đã dọn dẹp pip cache!${NC}\n"
 
-    # ── Báo cáo tổng kết ─────────────────────────────────────────────────────
     echo -e "${MAGENTA}╔══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${MAGENTA}║               📊  BÁO CÁO SỬA LỖI CUSTOM NODES             ║${NC}"
     echo -e "${MAGENTA}╠══════════════════════════════════════════════════════════════╣${NC}"
@@ -289,6 +288,11 @@ fix_custom_nodes() {
     fi
 
     echo -e "${MAGENTA}╚══════════════════════════════════════════════════════════════╝${NC}\n"
+
+    if [ $failed_nodes -gt 0 ]; then
+        return 1
+    fi
+    return 0
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

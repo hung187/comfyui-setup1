@@ -20,6 +20,8 @@ show_help() {
     echo "  --comfy-dir <PATH>       Chỉ định trực tiếp thư mục cài đặt ComfyUI"
     echo "  --gdrive                 Tự động lưu ảnh từ ComfyUI vào Google Drive"
     echo "  --no-ssl-verify          Bỏ qua kiểm tra chứng chỉ SSL"
+    echo "  --allow-partial          Không dừng tiến trình nếu một số node phụ bị lỗi"
+    echo "  --update-existing        Cho phép git pull cập nhật các repo đã tồn tại"
     echo "  --help                   Hiển thị hướng dẫn này"
     echo ""
 }
@@ -33,6 +35,10 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --comfy-dir)
+            if [ -z "${2:-}" ]; then
+                echo -e "${RED}❌ Lỗi: --comfy-dir yêu cầu đường dẫn thư mục.${NC}" >&2
+                exit 1
+            fi
             export COMFY_BASE="$2"
             shift 2
             ;;
@@ -44,12 +50,22 @@ while [[ $# -gt 0 ]]; do
             export DISABLE_SSL_VERIFY=1
             shift
             ;;
+        --allow-partial)
+            export ALLOW_PARTIAL=1
+            shift
+            ;;
+        --update-existing)
+            export UPDATE_EXISTING=1
+            shift
+            ;;
         --help|-h)
             show_help
             exit 0
             ;;
         *)
-            shift
+            echo -e "${RED}❌ Tùy chọn không hợp lệ: $1${NC}" >&2
+            show_help
+            exit 1
             ;;
     esac
 done
@@ -87,9 +103,7 @@ main_nodes() {
     echo -e "${CYAN}➡️  After restart run:                               ${NC}"
     echo -e "   ${GREEN}bash install_models.sh${NC}"
     echo -e "${GREEN}====================================================${NC}\n"
-
-    chmod +x "$SCRIPT_DIR/reload.sh" 2>/dev/null || true
-    exec "$SCRIPT_DIR/reload.sh"
+    return 0
 }
 
 main_nodes "$@"

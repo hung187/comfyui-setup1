@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Standalone reusable state machine writer for ComfyUI model downloads
+# Standalone reusable state machine writer for ComfyUI model downloads (Zero Secret Storage)
 update_state_machine_internal() {
     local state_file="$1"
     local path="$2"
@@ -12,15 +12,23 @@ update_state_machine_internal() {
     local total="${8:-0}"
 
     python3 - "$state_file" "$path" "$status" "$current_url" "$attempts" "$downloader" "$err_msg" "$total" <<'PY_STATE' 2>/dev/null || true
-import sys, os, json, time, fcntl, re
+import sys, os, json, time, fcntl, re, urllib.parse, hashlib
 
 state_file, path, status, current_url, attempts, downloader, err_msg, total = (
     sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], int(sys.argv[8])
 )
 
-# Use normalized path relative to models dir as key if possible, else normalized absolute path
 norm_path = os.path.normpath(path)
-clean_url = re.sub(r'([?&](token|api_key|apikey|key|authorization|access_token|auth|secret|signature)=)[^&]+', r'\1***', current_url)
+
+# Calculate clean safe URL and canonical source ID
+try:
+    parsed = urllib.parse.urlparse(current_url)
+    qs = [q for q in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True) if q[0].lower() not in ('token', 'api_key', 'apikey', 'key', 'auth', 'secret', 'signature', 'authorization')]
+    clean_url = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, urllib.parse.urlencode(qs), ""))
+    source_id = hashlib.sha256(clean_url.encode('utf-8')).hexdigest()
+except Exception:
+    clean_url = re.sub(r'([?&](token|api_key|apikey|key|authorization|access_token|auth|secret|signature)=)[^&]+', r'\1***', current_url)
+    source_id = ""
 
 lock_file = state_file + '.lock'
 os.makedirs(os.path.dirname(state_file), exist_ok=True)
@@ -41,12 +49,12 @@ try:
             if 'models' not in data:
                 data['models'] = {}
 
-            # Key by destination normalized path to prevent same-basename collisions in different folders
             data['models'][norm_path] = {
                 'path': norm_path,
                 'status': status,
                 'size': fsize,
-                'actual_source_url': clean_url,
+                'source_id': source_id,
+                'safe_source_url': clean_url,
                 'attempts': int(attempts),
                 'downloader': downloader,
                 'last_error': err_msg,
@@ -121,7 +129,7 @@ run_stage_04() {
             local combined_alts=""
             for alink in "$b_link1" "$b_link2" "$b_link3"; do
                 alink=$(resolve_config_value "$alink")
-                [ -n "$alink" ] && [[ "$alink" != *"civitai.red"* ]] && combined_alts="${combined_alts:+$combined_alts,}$alink"
+                [ -n "$alink" ] && [[ "$alink" != *"civitai.red"* ]] && combined_alts="${combined_alts:+$combined_alts|}$alink"
             done
 
             if [ -n "$b_path" ]; then
@@ -173,7 +181,6 @@ run_stage_04() {
         update_state_machine "$path" "resolving_source" "$url" 0 "downloader" ""
 
         if download_model_smart "$url" "$explicit_alts" "$path" "$desc" "$sha"; then
-            # Extract actual used url from MIRROR_FILES if mirror was used
             local recorded_url="$url"
             for mf in "${MIRROR_FILES[@]}"; do
                 local m_desc="" m_out="" m_prim="" m_used="" m_sz=""
@@ -198,6 +205,10 @@ run_stage_04() {
     echo -e "${GREEN}✅ Stage 04 hoàn tất: $CURRENT/$TOTAL model xử lý | ✔ $success_count thành công | ❌ $fail_count thất bại${NC}"
     echo -e "${CYAN}📄 Báo cáo trạng thái chi tiết đã lưu tại:${NC} $state_json"
     echo -e "${MAGENTA}════════════════════════════════════════════════════════════════${NC}\n"
+
+    if [ $fail_count -gt 0 ]; then
+        return 1
+    fi
     return 0
 }
 

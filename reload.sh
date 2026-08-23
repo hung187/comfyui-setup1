@@ -1,90 +1,102 @@
 #!/bin/bash
-# Helper script to fast-reload ComfyUI custom nodes without killing GPU / Docker container
+# ==============================================================================
+# SCRIPT KHỞI ĐỘNG LẠI COMFYUI CỤC BỘ (0.0.0.0:8188)
+# An toàn, không tự ý mở tunnel công khai trừ khi có cờ --tunnel
+# ==============================================================================
+
+set +e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+if [ -f "$SCRIPT_DIR/scripts/validation.sh" ]; then
+    source "$SCRIPT_DIR/scripts/validation.sh"
+fi
 if [ -f "$SCRIPT_DIR/scripts/common.sh" ]; then
     source "$SCRIPT_DIR/scripts/common.sh"
 fi
 
 CLI_COMFY_DIR=""
+ENABLE_TUNNEL=0
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         --comfy-dir)
+            if [ -z "${2:-}" ]; then
+                echo -e "\033[0;31m❌ Lỗi: --comfy-dir yêu cầu đường dẫn thư mục.\033[0m" >&2
+                exit 1
+            fi
             CLI_COMFY_DIR="$2"
             shift 2
             ;;
-        *)
+        --tunnel)
+            ENABLE_TUNNEL=1
             shift
+            ;;
+        --help|-h)
+            echo "Sử dụng: bash reload.sh [--comfy-dir <PATH>] [--tunnel]"
+            exit 0
+            ;;
+        *)
+            echo -e "\033[0;31m❌ Tùy chọn không hợp lệ: $1\033[0m" >&2
+            exit 1
             ;;
     esac
 done
 
 if declare -f resolve_comfy_base >/dev/null 2>&1; then
-    COMFY_DIR="$(resolve_comfy_base "${CLI_COMFY_DIR:-${COMFY_BASE:-}}" 0)"
+    if ! COMFY_DIR="$(resolve_comfy_base "${CLI_COMFY_DIR:-${COMFY_BASE:-}}" 0)"; then
+        echo -e "\033[0;31m❌ Không tìm thấy thư mục ComfyUI có sẵn. Dừng lại.\033[0m" >&2
+        exit 1
+    fi
 else
-    COMFY_DIR="${CLI_COMFY_DIR:-${COMFY_BASE:-$HOME/ComfyUI}}"
+    COMFY_DIR="${CLI_COMFY_DIR:-${COMFY_BASE:-}}"
+fi
+
+if [ -z "$COMFY_DIR" ] || [ ! -d "$COMFY_DIR" ] || [ ! -f "$COMFY_DIR/main.py" ]; then
+    echo -e "\033[0;31m❌ Thư mục ComfyUI không hợp lệ: $COMFY_DIR\033[0m" >&2
+    exit 1
 fi
 
 echo -e "\033[0;36m🔍 Sử dụng thư mục ComfyUI tại:\033[0m $COMFY_DIR"
 
-if [ -d "$COMFY_DIR" ] && [ -f "$COMFY_DIR/main.py" ]; then
-    echo -e "\033[0;34m⚡ Đang dọn dẹp tiến trình cũ và giải phóng Cổng 8188...\033[0m"
+cd "$COMFY_DIR" || exit 1
+PYTHON_BIN="python3"
+if [ -x "$COMFY_DIR/venv/bin/python" ]; then
+    PYTHON_BIN="$COMFY_DIR/venv/bin/python"
+elif [ -x "$COMFY_DIR/.venv/bin/python" ]; then
+    PYTHON_BIN="$COMFY_DIR/.venv/bin/python"
+elif command -v python3 &>/dev/null; then
+    PYTHON_BIN="$(command -v python3)"
+fi
 
-    # 1. Kill old process safely and free port 8188
-    fuser -k -9 8188/tcp 2>/dev/null || true
-    pkill -9 -f "main.py" 2>/dev/null || true
-    pkill -f "cloudflared" 2>/dev/null || true
-    sleep 2
+LOG_FILE="/tmp/comfyui.log"
+rm -f "$LOG_FILE"
 
-    cd "$COMFY_DIR"
-    PYTHON_BIN="python3"
-    command -v python3 &>/dev/null || PYTHON_BIN="python"
+echo -e "\033[0;34m🚀 Đang khởi động ComfyUI trên 0.0.0.0:8188...\033[0m"
+$PYTHON_BIN main.py --listen 0.0.0.0 --port 8188 --enable-cors-header > "$LOG_FILE" 2>&1 &
 
-    LOG_FILE="/tmp/comfyui.log"
-    rm -f "$LOG_FILE"
-
-    echo -e "\033[0;34m🚀 Đang khởi động lại ComfyUI & Nạp toàn bộ Custom Nodes...\033[0m"
-    $PYTHON_BIN main.py --listen 0.0.0.0 --port 8188 --enable-cors-header > "$LOG_FILE" 2>&1 &
-
-    # 2. Wait and verify readiness at port 8188
-    READY=0
-    for i in {1..30}; do
-        if command -v curl &>/dev/null; then
-            if curl -s http://127.0.0.1:8188/ >/dev/null 2>&1; then
-                READY=1
-                break
-            fi
+READY=0
+for i in {1..30}; do
+    if command -v curl &>/dev/null; then
+        if curl -s http://127.0.0.1:8188/ >/dev/null 2>&1; then
+            READY=1
+            break
         fi
-        sleep 1
-    done
-
-    if [ $READY -eq 1 ]; then
-        echo -e "\033[0;32m✅ THÀNH CÔNG! ComfyUI đã nạp xong tất cả Custom Nodes và sẵn sàng tại cổng 8188.\033[0m"
-    else
-        echo -e "\033[0;33m⚠️ ComfyUI vẫn đang nạp các Custom Node nặng trong background...\033[0m"
-        echo -e "\033[0;36m📋 15 Dòng log khởi động gần nhất:\033[0m"
-        tail -n 15 "$LOG_FILE" 2>/dev/null || true
     fi
+    sleep 1
+done
 
-    # 3. Cloudflared Tunnel for Public Web Access
-    echo -e "\n\033[0;36m🌐 Đang tạo đường dẫn Web công khai (Cloudflared Tunnel)... \033[0m"
-    if ! command -v cloudflared &>/dev/null; then
-        if [ ! -f "/tmp/cloudflared" ]; then
-            wget -q -O /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 2>/dev/null || \
-            curl -fsSL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 2>/dev/null || true
-            chmod +x /tmp/cloudflared 2>/dev/null || true
-        fi
-        CLOUDFLARED_BIN="/tmp/cloudflared"
-    else
-        CLOUDFLARED_BIN="cloudflared"
-    fi
+if [ $READY -eq 1 ]; then
+    echo -e "\033[0;32m✅ ComfyUI đã sẵn sàng tại http://0.0.0.0:8188\033[0m"
+else
+    echo -e "\033[0;33m⚠️ ComfyUI đang khởi động trong background (xem /tmp/comfyui.log)...\033[0m"
+fi
 
-    if [ -x "$CLOUDFLARED_BIN" ] || command -v cloudflared &>/dev/null; then
+if [ "$ENABLE_TUNNEL" -eq 1 ]; then
+    if command -v cloudflared &>/dev/null; then
         TUNNEL_LOG="/tmp/cloudflared.log"
         rm -f "$TUNNEL_LOG"
-        $CLOUDFLARED_BIN tunnel --url http://127.0.0.1:8188 > "$TUNNEL_LOG" 2>&1 &
-
+        cloudflared tunnel --url http://127.0.0.1:8188 > "$TUNNEL_LOG" 2>&1 &
         PUBLIC_URL=""
         for t in {1..15}; do
             if [ -f "$TUNNEL_LOG" ]; then
@@ -93,14 +105,10 @@ if [ -d "$COMFY_DIR" ] && [ -f "$COMFY_DIR/main.py" ]; then
             fi
             sleep 1
         done
-
         if [ -n "$PUBLIC_URL" ]; then
-            echo -e "\033[0;32m===============================================================\033[0m"
-            echo -e "\033[1;33m🔗 ĐƯỜNG DẪN WEB CÔNG KHAI TRUY CẬP COMFYUI TỪ BẤT KỲ ĐÂU:\033[0m"
-            echo -e "\033[1;36m👉 $PUBLIC_URL\033[0m"
-            echo -e "\033[0;32m===============================================================\033[0m"
+            echo -e "\033[1;36m🔗 Public Cloudflare URL: $PUBLIC_URL\033[0m"
         fi
+    else
+        echo -e "\033[0;33m⚠️ Không tìm thấy công cụ cloudflared để tạo tunnel công khai.\033[0m"
     fi
-else
-    echo -e "\033[0;31m❌ Không tìm thấy thư mục ComfyUI hợp lệ trên máy chủ này.\033[0m"
 fi

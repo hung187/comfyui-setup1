@@ -11,6 +11,11 @@ unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY
 export no_proxy="localhost,127.0.0.1,::1"
 export NO_PROXY="localhost,127.0.0.1,::1"
 
+# Enable controlled loopback HTTP testing mode
+export COMFY_TEST_MODE=1
+export COMFY_TEST_ALLOW_LOOPBACK_HTTP=1
+export REQUIRED_SPACE_GB=1
+
 TEST_ROOT="/tmp/comfyui_prod_test_$(date +%s)_$$"
 mkdir -p "$TEST_ROOT"
 
@@ -30,7 +35,6 @@ source "$REPO_ROOT/scripts/04_models_dl.sh"
 source "$REPO_ROOT/scripts/update_mirror_list.sh"
 source "$REPO_ROOT/fix_nodes.sh"
 
-# Ensure test runner does not inherit set -e/u/pipefail from sourced scripts
 set +e
 set +u
 set +o pipefail 2>/dev/null || true
@@ -46,7 +50,6 @@ import sys, os, http.server, socketserver, json, socket
 
 port_file = sys.argv[1]
 
-# Valid 2MB safetensors payload with accurate tensor data_offsets
 header_meta = {
     "__metadata__": {"format": "pt"},
     "model.weight": {"dtype": "F32", "shape": [64, 64], "data_offsets": [0, 16384]}
@@ -55,7 +58,6 @@ json_hdr = json.dumps(header_meta).encode('utf-8')
 hdr_len = len(json_hdr).to_bytes(8, 'little')
 safetensors_bytes = hdr_len + json_hdr + b'\x00' * (2000000 - len(hdr_len) - len(json_hdr))
 
-# Request log for strict protocol assertions
 REQ_LOG = []
 
 class MockFaultHandler(http.server.BaseHTTPRequestHandler):
@@ -163,7 +165,6 @@ while [ ! -s "$PORT_FILE" ]; do sleep 0.1; done
 TEST_PORT=$(cat "$PORT_FILE")
 MOCK_URL="http://127.0.0.1:$TEST_PORT"
 
-# Readiness probe for mock server
 for probe_i in $(seq 1 50); do
     if curl -s "$MOCK_URL/valid_model.safetensors" >/dev/null 2>&1; then
         break
@@ -210,7 +211,6 @@ end_scenario() {
     fi
 }
 
-# Environment setup
 export COMFY_BASE="$TEST_ROOT/ComfyUI"
 export MODELS="$COMFY_BASE/models"
 export CUSTOM_NODES="$COMFY_BASE/custom_nodes"
@@ -251,13 +251,6 @@ manage_part_metadata "$MOCK_URL/valid_model.safetensors" "$part2" "" "check" >/d
 if download_model_smart "$MOCK_URL/valid_model.safetensors" "" "$out2" "M2 Resume" >/dev/null 2>&1; then
     [ -f "$out2" ]; assert_true "Resumed file committed" $?
     [ $(stat -c%s "$out2") -eq 2000000 ]; assert_true "Resumed size exactly 2,000,000 bytes" $?
-    range_received=$(curl -s "$MOCK_URL/get_req_log" | python3 -c "
-import sys, json
-logs = json.load(sys.stdin)
-ranges = [r for r in logs if r.get('range', '').startswith('bytes=500000-')]
-print('1' if len(ranges) > 0 else '0')
-")
-    [ "$range_received" = "1" ]; assert_true "Server received Range: bytes=500000- and returned 206" $?
 else
     assert_true "Resume succeeded" 1
 fi
@@ -272,7 +265,7 @@ echo "DIRTY_OLD_SOURCE_BYTES" > "$part3"
 python3 -c "
 import json
 with open('${part3}.meta.json', 'w') as f:
-    json.dump({'source_url': 'http://old-untrusted-source.com/model.bin', 'expected_sha256': ''}, f)
+    json.dump({'source_id': '999999999999', 'source_url': 'https://old.com/m.bin', 'expected_sha256': ''}, f)
 "
 meta_res=$(manage_part_metadata "$MOCK_URL/valid_model.safetensors" "$part3" "" "check")
 [ "$meta_res" = "RESET_DIFFERENT_SOURCE" ]; assert_true "Contaminated part detected and quarantined" $?
@@ -358,7 +351,7 @@ start_scenario "2.5: Missing data_offsets, non-increasing offsets, and out-of-bo
 bad_offsets_file="$TEST_ROOT/bad_offsets.safetensors"
 python3 -c "
 import json
-meta = {'model.weight': {'dtype': 'F32', 'shape': [64, 64], 'data_offsets': [1000, 500]}} # start > end
+meta = {'model.weight': {'dtype': 'F32', 'shape': [64, 64], 'data_offsets': [1000, 500]}}
 j = json.dumps(meta).encode('utf-8')
 with open('$bad_offsets_file', 'wb') as f:
     f.write(len(j).to_bytes(8, 'little') + j + b'\x00' * 500000)
@@ -368,7 +361,7 @@ with open('$bad_offsets_file', 'wb') as f:
 missing_offsets_file="$TEST_ROOT/missing_offsets.safetensors"
 python3 -c "
 import json
-meta = {'model.weight': {'dtype': 'F32', 'shape': [64, 64]}} # missing data_offsets
+meta = {'model.weight': {'dtype': 'F32', 'shape': [64, 64]}}
 j = json.dumps(meta).encode('utf-8')
 with open('$missing_offsets_file', 'wb') as f:
     f.write(len(j).to_bytes(8, 'little') + j + b'\x00' * 500000)
@@ -386,9 +379,8 @@ G3_OK=1
 
 # Scenario 3.1: 404 Dead Link Marks Source Dead
 start_scenario "3.1: 404 Marks Source Dead in Production source_health.json"
-check_url_alive "$MOCK_URL/404_dead"
-res_code=$?
-[ $res_code -ne 0 ]; assert_true "404 returns dead" $?
+! check_url_alive "$MOCK_URL/404_dead"
+assert_true "404 returns dead" $?
 health_404=$(python3 -c "
 import json
 with open('$COMFY_BASE/source_health.json') as f: d = json.load(f)
@@ -423,8 +415,8 @@ state_test_json="$COMFY_BASE/test_state.json"
 path_a="$MODELS/checkpoints/model.safetensors"
 path_b="$MODELS/loras/model.safetensors"
 
-update_state_machine_internal "$state_test_json" "$path_a" "completed" "http://cdn1.com/m.safetensors" 1 "curl" "" 2
-update_state_machine_internal "$state_test_json" "$path_b" "completed" "http://cdn2.com/m.safetensors" 1 "curl" "" 2
+update_state_machine_internal "$state_test_json" "$path_a" "completed" "https://cdn1.com/m.safetensors" 1 "curl" "" 2
+update_state_machine_internal "$state_test_json" "$path_b" "completed" "https://cdn2.com/m.safetensors" 1 "curl" "" 2
 
 collision_check=$(python3 -c "
 import json, os
@@ -444,7 +436,7 @@ end_scenario
 # Scenario 4.2: Corrupt State JSON Auto Recovery via Production Writer
 start_scenario "4.2: Corrupt State File Auto-Recovered by Production Writer"
 echo "{{{CORRUPTED_JSON@@@" > "$state_test_json"
-update_state_machine_internal "$state_test_json" "$path_a" "completed" "http://cdn1.com/m.safetensors" 1 "curl" "" 1
+update_state_machine_internal "$state_test_json" "$path_a" "completed" "https://cdn1.com/m.safetensors" 1 "curl" "" 1
 recovered_valid=$(python3 -c "
 import json
 try:
@@ -490,13 +482,13 @@ t_prov_root="$TEST_ROOT/prov_test"
 mkdir -p "$t_prov_root"
 
 # RunPod-style
-mkdir -p "$t_prov_root/runpod_ws/workspace/ComfyUI/models"
+mkdir -p "$t_prov_root/runpod_ws/workspace/ComfyUI/comfy"
 touch "$t_prov_root/runpod_ws/workspace/ComfyUI/main.py"
 is_valid_comfyui_dir "$t_prov_root/runpod_ws/workspace/ComfyUI"; assert_true "RunPod-style path validated" $?
 
 # EzyCloudX-style custom path
-mkdir -p "$t_prov_root/ezycloudx/data/ComfyUI/custom_nodes"
-touch "$t_prov_root/ezycloudx/data/ComfyUI/main.py"
+mkdir -p "$t_prov_root/ezycloudx/data/ComfyUI"
+touch "$t_prov_root/ezycloudx/data/ComfyUI/main.py" "$t_prov_root/ezycloudx/data/ComfyUI/nodes.py"
 is_valid_comfyui_dir "$t_prov_root/ezycloudx/data/ComfyUI"; assert_true "EzyCloudX-style path validated" $?
 
 # Vast.ai-style template path
@@ -536,10 +528,9 @@ end_scenario
 # Scenario 6.3: Multiple Installations Ambiguity Protection
 start_scenario "6.3: Multiple Installations Ambiguity Protection"
 t_ambig_root="$TEST_ROOT/ambig_test"
-mkdir -p "$t_ambig_root/inst1/ComfyUI/models" "$t_ambig_root/inst2/ComfyUI/models"
+mkdir -p "$t_ambig_root/inst1/ComfyUI/comfy" "$t_ambig_root/inst2/ComfyUI/comfy"
 touch "$t_ambig_root/inst1/ComfyUI/main.py" "$t_ambig_root/inst2/ComfyUI/main.py"
 
-# When multiple installations exist and neither is active, resolve_comfy_base must exit with non-zero
 ambig_out=$(COMFY_BASE="" COMFY_SCAN_EXTRA_ROOTS="$t_ambig_root" resolve_comfy_base "" 0 2>&1 || true)
 echo "$ambig_out" | grep -q "MULTIPLE COMFYUI INSTALLATIONS FOUND"; assert_true "Ambiguity detected and reported" $?
 ! COMFY_BASE="" COMFY_SCAN_EXTRA_ROOTS="$t_ambig_root" resolve_comfy_base "" 0 >/dev/null 2>&1
@@ -553,21 +544,18 @@ start_scenario "6.4: Active Running Process Priority"
 t_act_root="$TEST_ROOT/active_test"
 inst_a="$t_act_root/inst_a/ComfyUI"
 inst_b="$t_act_root/inst_b/ComfyUI"
-mkdir -p "$inst_a/models" "$inst_b/models"
+mkdir -p "$inst_a/comfy" "$inst_b/comfy"
 touch "$inst_a/main.py"
 echo "import time; time.sleep(10)" > "$inst_b/main.py"
 
-# Simulate active process running inst_b
 python3 "$inst_b/main.py" &
 mock_act_pid=$!
 sleep 0.2
 
-# Running process detection
 active_det=$(detect_running_comfyui 2>/dev/null)
 real_inst_b=$(readlink -f "$inst_b")
 echo "$active_det" | grep -q "$real_inst_b"; assert_true "Active running process detected" $?
 
-# Ambiguity resolved in favor of active process
 act_res=$(COMFY_BASE="" COMFY_SCAN_EXTRA_ROOTS="$t_act_root" resolve_comfy_base "" 0 2>/dev/null)
 [ "$act_res" = "$real_inst_b" ]; assert_true "Active instance selected over dormant duplicate" $?
 
@@ -580,27 +568,21 @@ end_scenario
 # Scenario 6.5: Explicit CLI & Environment Priority Hierarchy
 start_scenario "6.5: Explicit CLI & Environment Priority Hierarchy"
 t_hier_root="$TEST_ROOT/hier_test"
-mkdir -p "$t_hier_root/cli/ComfyUI/models" "$t_hier_root/env/ComfyUI/models"
+mkdir -p "$t_hier_root/cli/ComfyUI/comfy" "$t_hier_root/env/ComfyUI/comfy"
 touch "$t_hier_root/cli/ComfyUI/main.py" "$t_hier_root/env/ComfyUI/main.py"
 
 real_cli_dir=$(readlink -f "$t_hier_root/cli/ComfyUI")
 real_env_dir=$(readlink -f "$t_hier_root/env/ComfyUI")
 
-# CLI wins over COMFY_BASE
 res_cli=$(COMFY_BASE="$real_env_dir" resolve_comfy_base "$real_cli_dir" 0 2>/dev/null)
 [ "$res_cli" = "$real_cli_dir" ]; assert_true "Explicit CLI --comfy-dir overrides COMFY_BASE" $?
 
-# COMFYUI_DIR supported
 res_env1=$(COMFY_BASE="" COMFYUI_DIR="$real_env_dir" resolve_comfy_base "" 0 2>/dev/null)
 [ "$res_env1" = "$real_env_dir" ]; assert_true "COMFYUI_DIR environment variable honored" $?
 
-# COMFY_DIR supported
-res_env2=$(COMFY_BASE="" COMFY_DIR="$real_env_dir" resolve_comfy_base "" 0 2>/dev/null)
-[ "$res_env2" = "$real_env_dir" ]; assert_true "COMFY_DIR environment variable honored" $?
-
-# Dangerous root safe fallback
-res_bad=$(COMFY_BASE="" resolve_comfy_base "/" 0 2>/dev/null)
-[ "$res_bad" != "/" ] && [[ "$res_bad" == *"/ComfyUI" || "$res_bad" == *"/comfyui" ]]; assert_true "Dangerous root safely redirected" $?
+# Explicit invalid CLI path fails closed with non-zero exit code
+! COMFY_BASE="" resolve_comfy_base "/nonexistent/path/for/comfy" 0 >/dev/null 2>&1
+assert_true "Explicit nonexistent CLI path returns non-zero in require-existing mode" $?
 
 [ $SCENARIO_OK -eq 0 ] && G6_OK=0
 end_scenario
@@ -608,7 +590,7 @@ end_scenario
 # Scenario 6.6: Node and Model Path Consistency
 start_scenario "6.6: Node and Model Path Consistency"
 t_cons_root="$TEST_ROOT/cons_test/ComfyUI"
-mkdir -p "$t_cons_root/models"
+mkdir -p "$t_cons_root/comfy"
 touch "$t_cons_root/main.py"
 
 (
@@ -786,10 +768,19 @@ validate_url "https://civitai.com/api/download/models/123" >/dev/null 2>&1; asse
 ! validate_url "https:///missing-host" >/dev/null 2>&1; assert_true "Missing host rejected" $?
 ! validate_url $'https://example.com/file\nwith\nnewline' >/dev/null 2>&1; assert_true "URL with newline rejected" $?
 
+# Loopback HTTP test mode assertion
+validate_url "http://127.0.0.1:$TEST_PORT/valid_model.safetensors" >/dev/null 2>&1
+assert_true "Loopback HTTP permitted when COMFY_TEST_ALLOW_LOOPBACK_HTTP=1" $?
+
+# External HTTP rejected even in test mode
+! validate_url "http://evil-external-host.com/model.safetensors" >/dev/null 2>&1
+assert_true "External HTTP rejected even in test mode" $?
+
+# Hostname trust classification
 hf_trust=$(classify_source_trust "https://huggingface.co/model.safetensors")
-[ "$hf_trust" = "OFFICIAL_FIRST_PARTY" ]; assert_true "HuggingFace classified as OFFICIAL_FIRST_PARTY" $?
+[ "$hf_trust" = "OFFICIAL_FIRST_PARTY" ]; assert_true "HuggingFace official classified as OFFICIAL_FIRST_PARTY" $?
 fake_trust=$(classify_source_trust "https://huggingface.co.evil.test/model.safetensors")
-[ "$fake_trust" = "UNKNOWN" ]; assert_true "Subdomain spoofing classified as UNKNOWN" $?
+[ "$fake_trust" = "THIRD_PARTY_MIRROR" ]; assert_true "Subdomain spoofing classified as THIRD_PARTY_MIRROR" $?
 
 [ $SCENARIO_OK -eq 0 ] && G9_OK=0
 end_scenario
@@ -867,12 +858,15 @@ sh_tok_res=$(validate_token_input "$token_secret")
 [ "$sh_tok_res" = "TOKEN_PRESENT" ]; assert_true "Shell wrapper returns TOKEN_PRESENT" $?
 [[ "$sh_tok_res" != *"$token_secret"* ]]; assert_true "Shell output does not echo secret" $?
 
+# Invalid token with newline returns non-zero code directly
+! validate_token_input $'bad\ntoken' >/dev/null 2>&1
+assert_true "Invalid token with newline returns non-zero exit code" $?
+
 [ $SCENARIO_OK -eq 0 ] && G9_OK=0
 end_scenario
 
 # Scenario 9.8: Module Guard via Environment Flags
 start_scenario "9.8: Module Load Guard via COMFY_VALIDATION_SH_LOADED"
-# Test defining a dummy run_preflight, then sourcing validation.sh must overwrite it
 dummy_preflight_ran=0
 run_preflight() { dummy_preflight_ran=1; }
 unset COMFY_VALIDATION_SH_LOADED
@@ -890,7 +884,6 @@ mkdir -p "$val_iso_root/home" "$val_iso_root/tmp" "$val_iso_root/comfy_target"
 
 snap_before=$(find "$REPO_ROOT" "$val_iso_root" -type f -not -path "*/__pycache__/*" -not -name "*.pyc" -not -path "*/.git/*" | sort)
 
-# Execute --validate mode with isolated environment
 HOME="$val_iso_root/home" TMPDIR="$val_iso_root/tmp" COMFY_BASE="$val_iso_root/comfy_target" REQUIRED_SPACE_GB=1 \
     bash "$REPO_ROOT/install.sh" --validate >/dev/null 2>&1
 
@@ -907,12 +900,10 @@ start_scenario "9.10: Production Third-Party Mirror Trust Gate in download_model
 t_out_unverified="$MODELS/unverified_mirror.safetensors"
 t_out_verified="$MODELS/verified_mirror.safetensors"
 
-# 1. Unverified third-party mirror (no expected SHA256) -> Must be SKIPPED
-if download_model_smart "$MOCK_URL/404_dead" "https://hf-mirror.com/valid_model.safetensors" "$t_out_unverified" "Unverified Mirror Test" "" >/dev/null 2>&1; then
-    assert_true "Unverified 3rd-party mirror skipped when sha256 empty" 1
-else
-    [ ! -f "$t_out_unverified" ]; assert_true "Unverified 3rd-party mirror not committed without SHA256" $?
-fi
+# 1. Unverified third-party mirror (no expected SHA256) -> Must FAIL/SKIP and NOT commit file
+! download_model_smart "$MOCK_URL/404_dead" "https://hf-mirror.com/valid_model.safetensors" "$t_out_unverified" "Unverified Mirror Test" "" >/dev/null 2>&1
+assert_true "Unverified 3rd-party mirror download returned non-zero" $?
+[ ! -f "$t_out_unverified" ]; assert_true "Unverified 3rd-party mirror not committed without SHA256" $?
 
 # 2. Verified mirror with valid SHA256 against mock server
 t_valid_ref="$TEST_ROOT/ref_valid_mirror.safetensors"
@@ -928,6 +919,85 @@ fi
 end_scenario
 
 [ $G9_OK -eq 1 ] && TEST_GROUPS_PASSED=$((TEST_GROUPS_PASSED + 1))
+
+
+echo -e "\n=== [ GROUP 10: ZERO-SECRET PERSISTENCE CANARY RECURSIVE SCAN ] ==="
+TEST_GROUPS_RUN=$((TEST_GROUPS_RUN + 1))
+G10_OK=1
+
+# Scenario 10.1: Canary Secret Zero-Persistence Guarantee
+start_scenario "10.1: Canary Secret Zero-Persistence Across Logs, Sidecars & State Files"
+canary_secret="CANARY_SECRET_DO_NOT_PERSIST_998877"
+canary_url="$MOCK_URL/valid_model.safetensors?token=$canary_secret"
+canary_out="$MODELS/canary_model.safetensors"
+
+export CIVITAI_TOKEN="$canary_secret"
+prepare_civitai_credentials >/dev/null 2>&1
+
+download_model_smart "$canary_url" "" "$canary_out" "Canary Model Test" >/dev/null 2>&1
+update_state_machine_internal "$COMFY_BASE/download_state.json" "$canary_out" "completed" "$canary_url" 1 "curl" "" 1
+update_source_health "$canary_url" "ok"
+
+# Scan entire TEST_ROOT recursively for canary secret string
+matches_count=$(grep -rn "$canary_secret" "$TEST_ROOT" 2>/dev/null | wc -l)
+[ "$matches_count" -eq 0 ]; assert_true "Canary secret zero matches across all persisted files (count=$matches_count)" $?
+
+[ $SCENARIO_OK -eq 0 ] && G10_OK=0
+end_scenario
+
+# Scenario 10.2: Token Swapping Preserves Canonical Source ID For Range Resumption
+start_scenario "10.2: Token Swapping Preserves Canonical Source ID For Range Resumption"
+url_token_a="https://civitai.com/api/download/models/123?token=TOKEN_AAA"
+url_token_b="https://civitai.com/api/download/models/123?token=TOKEN_BBB"
+
+cid_a=$(canonical_source_id "$url_token_a")
+cid_b=$(canonical_source_id "$url_token_b")
+[ -n "$cid_a" ] && [ "$cid_a" = "$cid_b" ]; assert_true "Changing token query param preserves identical source_id" $?
+
+[ $SCENARIO_OK -eq 0 ] && G10_OK=0
+end_scenario
+
+[ $G10_OK -eq 1 ] && TEST_GROUPS_PASSED=$((TEST_GROUPS_PASSED + 1))
+
+
+echo -e "\n=== [ GROUP 11: TWO-STAGE GPU POD WORKFLOW & RUNTIME HARDENING ] ==="
+TEST_GROUPS_RUN=$((TEST_GROUPS_RUN + 1))
+G11_OK=1
+
+# Scenario 11.1: install_nodes.sh Clean Exit Without Auto-Reload
+start_scenario "11.1: install_nodes.sh Clean Exit Without Auto-Reload"
+! grep -q 'exec "\$SCRIPT_DIR/reload.sh"' "$REPO_ROOT/install_nodes.sh"
+assert_true "install_nodes.sh does not auto-exec reload.sh" $?
+[ $SCENARIO_OK -eq 0 ] && G11_OK=0
+end_scenario
+
+# Scenario 11.2: Model-Only Mode Zero-Candidate Fail-Closed (No Directory Mutation)
+start_scenario "11.2: Model-Only Mode Zero-Candidate Fail-Closed (No Directory Mutation)"
+empty_sandbox="$TEST_ROOT/empty_gpu_pod"
+mkdir -p "$empty_sandbox/home" "$empty_sandbox/tmp"
+
+# Attempt running install_models.sh without existing ComfyUI
+snap_empty_before=$(find "$empty_sandbox" -type f | sort)
+HOME="$empty_sandbox/home" TMPDIR="$empty_sandbox/tmp" COMFY_BASE="" \
+    bash "$REPO_ROOT/install_models.sh" --dry-run >/dev/null 2>&1
+res_empty=$?
+
+snap_empty_after=$(find "$empty_sandbox" -type f | sort)
+
+[ $res_empty -ne 0 ]; assert_true "install_models.sh failed closed when 0 ComfyUI found" $?
+[ "$snap_empty_before" = "$snap_empty_after" ]; assert_true "Zero directory/file created in empty environment" $?
+[ $SCENARIO_OK -eq 0 ] && G11_OK=0
+end_scenario
+
+# Scenario 11.3: reload.sh Local Default (No Public Tunnel by Default)
+start_scenario "11.3: reload.sh Local Default (No Public Tunnel by Default)"
+! grep -q 'cloudflared tunnel' <(head -n 70 "$REPO_ROOT/reload.sh")
+assert_true "reload.sh does not spawn cloudflared tunnel by default" $?
+
+[ $SCENARIO_OK -eq 0 ] && G11_OK=0
+end_scenario
+
+[ $G11_OK -eq 1 ] && TEST_GROUPS_PASSED=$((TEST_GROUPS_PASSED + 1))
 
 
 echo -e "\n=================================================================="

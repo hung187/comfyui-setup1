@@ -3,6 +3,11 @@
 run_stage_03() {
     init_runtime_env || return 1
 
+    local allow_partial="${ALLOW_PARTIAL:-0}"
+    for arg in "$@"; do
+        [ "$arg" = "--allow-partial" ] && allow_partial=1
+    done
+
     echo -e "\n${MAGENTA}════════════════════════════════════════════════════════════════${NC}"
     echo -e "${BLUE}📦 Stage 03: Cài đặt Custom Nodes...${NC}"
     echo -e "${MAGENTA}════════════════════════════════════════════════════════════════${NC}"
@@ -54,16 +59,25 @@ run_stage_03() {
     done < "$config_file"
 
     echo -e "\n${BLUE}📦 Cài đặt Dependencies cho Custom Nodes...${NC}"
+    local req_fail=0
     for dir in "$CUSTOM_NODES"/*/; do
-        [ -d "$dir" ] && install_requirements "$dir"
+        if [ -d "$dir" ]; then
+            if ! install_requirements "$dir"; then
+                req_fail=$((req_fail + 1))
+            fi
+        fi
     done
 
     echo -e "   ${CYAN}🧹 Dọn dẹp bộ nhớ tạm pip cache để giải phóng đĩa...${NC}"
     $PIP_BASE_CMD cache purge >> "$COMFY_BASE/pip_install.log" 2>&1 || true
 
     echo -e "\n${MAGENTA}════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${GREEN}✅ Stage 03 hoàn tất: $node_ok/$node_total nodes cài thành công${NC}$([ $node_fail -gt 0 ] && echo -e " | ${RED}❌ $node_fail thất bại${NC}")"
+    echo -e "${GREEN}✅ Stage 03 hoàn tất: $node_ok/$node_total nodes cài thành công${NC}$([ $node_fail -gt 0 ] && echo -e " | ${RED}❌ $node_fail thất bại${NC}")$([ $req_fail -gt 0 ] && echo -e " | ${RED}❌ $req_fail requirements lỗi${NC}")"
     echo -e "${MAGENTA}════════════════════════════════════════════════════════════════${NC}\n"
+
+    if [ $((node_fail + req_fail)) -gt 0 ] && [ "$allow_partial" -ne 1 ]; then
+        return 1
+    fi
     return 0
 }
 

@@ -34,10 +34,18 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --comfy-dir)
+            if [ -z "${2:-}" ]; then
+                echo -e "${RED}❌ Lỗi: --comfy-dir yêu cầu đường dẫn thư mục.${NC}" >&2
+                exit 1
+            fi
             export COMFY_BASE="$2"
             shift 2
             ;;
         --civitai-token)
+            if [ -z "${2:-}" ]; then
+                echo -e "${RED}❌ Lỗi: --civitai-token yêu cầu giá trị token.${NC}" >&2
+                exit 1
+            fi
             export CIVITAI_TOKEN="$2"
             shift 2
             ;;
@@ -54,7 +62,9 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            shift
+            echo -e "${RED}❌ Tùy chọn không hợp lệ: $1${NC}" >&2
+            show_help
+            exit 1
             ;;
     esac
 done
@@ -64,7 +74,6 @@ if [ "$DO_VALIDATE" -eq 1 ]; then
     exit $?
 fi
 
-source "$SCRIPT_DIR/scripts/01_env_setup.sh"
 source "$SCRIPT_DIR/scripts/04_models_dl.sh"
 source "$SCRIPT_DIR/scripts/05_manifest.sh"
 
@@ -73,18 +82,32 @@ main_models() {
     echo -e "${MAGENTA}🚀 TẢI MODELS CHO COMFYUI (MULTI-MIRROR FALLBACK)   ${NC}"
     echo -e "${MAGENTA}====================================================${NC}"
 
+    # Require existing ComfyUI installation (Never creates new directory in model-only mode)
+    if ! init_runtime_env "require-existing"; then
+        echo -e "${RED}❌ Không tìm thấy thư mục cài đặt ComfyUI có sẵn. Vui lòng chạy install_nodes.sh trước.${NC}"
+        return 1
+    fi
+
     if ! run_preflight "models" 0; then
         echo -e "${RED}❌ Preflight Safety Gate phát hiện lỗi cấu hình models.${NC}"
         return 1
     fi
 
-    run_stage_01 "$@" || return 1
-    run_stage_04 "$@" || return 1
+    prepare_civitai_credentials
+
+    # Lightweight model download: executes Stage 04 & Stage 05 directly without heavy system reinstall
+    if ! run_stage_04 "$@"; then
+        echo -e "${RED}❌ Stage 04 gặp lỗi khi tải models.${NC}"
+        run_stage_05 "$@" || true
+        return 1
+    fi
+
     run_stage_05 "$@" || return 1
 
     echo -e "\n${GREEN}====================================================${NC}"
     echo -e "${GREEN}✅ ĐÃ TẢI XONG TẤT CẢ MODELS!                        ${NC}"
     echo -e "${GREEN}====================================================${NC}\n"
+    return 0
 }
 
 main_models "$@"

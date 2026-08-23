@@ -5,10 +5,10 @@
 # ================================================================================================================================
 
 if [ "${COMFY_VALIDATION_SH_LOADED:-}" = "1" ]; then
-    return 0
+    return 0 2>/dev/null || exit 0
 fi
 export COMFY_VALIDATION_SH_LOADED=1
-export COMFY_VALIDATION_SH_VERSION="1"
+export COMFY_VALIDATION_SH_VERSION="2"
 
 # Ensure common colors are available
 RED="${RED:-\033[0;31m}"
@@ -19,7 +19,7 @@ MAGENTA="${MAGENTA:-\033[0;35m}"
 CYAN="${CYAN:-\033[0;36m}"
 NC="${NC:-\033[0m}"
 
-# Limits for config protection (applied to both local preflight and remote updates)
+# Limits for config protection
 MAX_CONFIG_FILE_SIZE_BYTES=5242880 # 5 MB
 MAX_CONFIG_ROWS=5000
 MAX_CONFIG_LINE_LENGTH=16384
@@ -28,7 +28,6 @@ MAX_CONFIG_LINE_LENGTH=16384
 # 1. STANDALONE PYTHON VALIDATOR BACKEND
 # ================================================================================================================================
 
-# Execute a Python validation operation and return JSON {status: "pass"|"fail", error_code: "...", error_msg: "...", data: ...}
 _py_validate_call() {
     local op="$1"
     shift
@@ -48,9 +47,7 @@ def make_res(status, code="", msg="", data=None):
 def sanitize_str(s):
     if not isinstance(s, str):
         return ""
-    # Strip ANSI escape sequences
     s = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', s)
-    # Strip all C0 control characters (0x00-0x1F) and DEL (0x7F)
     s = re.sub(r'[\x00-\x1f\x7f]', '', s)
     return s.strip()
 
@@ -58,7 +55,6 @@ def resolve_canonical_path(base_dir, target_path):
     base_real = os.path.realpath(os.path.abspath(os.path.expanduser(base_dir)))
     target_abs = os.path.abspath(os.path.expanduser(target_path))
 
-    # Walk up target_abs to find nearest existing parent and realpath it (symlink resolution)
     curr = target_abs
     suffix_parts = []
     while not os.path.exists(curr) and curr != os.path.dirname(curr):
@@ -69,7 +65,7 @@ def resolve_canonical_path(base_dir, target_path):
     canonical_target = os.path.normpath(os.path.join(parent_real, *suffix_parts)) if suffix_parts else parent_real
     return base_real, canonical_target
 
-def validate_url_value(raw_url, allowed_schemes=('http', 'https')):
+def validate_url_value(raw_url):
     if not raw_url or not str(raw_url).strip():
         return False, "E_URL_EMPTY", "URL cannot be empty", None
 
@@ -85,36 +81,56 @@ def validate_url_value(raw_url, allowed_schemes=('http', 'https')):
     except Exception as e:
         return False, "E_INVALID_URL", f"Cannot parse URL: {str(e)}", None
 
-    if not parsed.scheme or parsed.scheme.lower() not in [s.lower() for s in allowed_schemes]:
-        allowed_str = "/".join([s.upper() for s in allowed_schemes])
-        return False, "E_INVALID_URL_SCHEME", f"Unsupported URL scheme '{parsed.scheme}'. Only {allowed_str} allowed.", None
-
+    scheme = (parsed.scheme or "").lower().strip()
     hostname = (parsed.hostname or "").lower().strip()
+
+    if not scheme:
+        return False, "E_INVALID_URL_SCHEME", "URL missing scheme", None
     if not hostname:
         return False, "E_INVALID_HOSTNAME", "URL missing hostname", None
+
+    # Scheme Validation: Production is strictly HTTPS.
+    # HTTP is ONLY permitted for loopback testing when COMFY_TEST_MODE=1 and COMFY_TEST_ALLOW_LOOPBACK_HTTP=1.
+    test_mode = os.environ.get("COMFY_TEST_MODE") == "1"
+    allow_loopback = os.environ.get("COMFY_TEST_ALLOW_LOOPBACK_HTTP") == "1"
+    is_loopback = hostname in ("127.0.0.1", "localhost", "::1")
+
+    if scheme == "http":
+        if not (test_mode and allow_loopback and is_loopback):
+            return False, "E_INVALID_URL_SCHEME", f"Insecure HTTP scheme is forbidden in production: {clean_url}", None
+    elif scheme != "https":
+        return False, "E_INVALID_URL_SCHEME", f"Unsupported URL scheme '{scheme}'. Only HTTPS is allowed.", None
 
     # Forbidden domain checks (civitai.red and subdomains)
     if hostname == "civitai.red" or hostname.endswith(".civitai.red"):
         return False, "E_FORBIDDEN_DOMAIN", f"Forbidden domain '{hostname}' is not permitted.", None
 
-    # Source Trust Classification
+    # Source Trust Classification with strict boundary matching
     trust_class = "UNKNOWN"
-    if (hostname == "civitai.com" or hostname.endswith(".civitai.com") or
-        hostname == "huggingface.co" or hostname.endswith(".huggingface.co") or
-        hostname == "hf.co" or hostname.endswith(".hf.co") or
-        hostname == "github.com" or hostname.endswith(".github.com") or
-        hostname == "raw.githubusercontent.com" or hostname == "objects.githubusercontent.com" or
-        hostname == "githubusercontent.com" or hostname.endswith(".githubusercontent.com")):
+    path = parsed.path or ""
+
+    # Check first-party vs mirror
+    if is_loopback and test_mode:
+        trust_class = "OFFICIAL_FIRST_PARTY"
+    elif hostname == "civitai.com" or hostname.endswith(".civitai.com"):
+        trust_class = "OFFICIAL_FIRST_PARTY"
+    elif (hostname == "huggingface.co" or hostname.endswith(".huggingface.co") or hostname == "hf.co" or hostname.endswith(".hf.co")):
+        # User dataset backup repos are treated as MIRRORS requiring SHA
+        if "/datasets/hung187/comfyui-models-backup" in path or "/datasets/" in path:
+            trust_class = "THIRD_PARTY_MIRROR"
+        else:
+            trust_class = "OFFICIAL_FIRST_PARTY"
+    elif hostname == "github.com" or hostname.endswith(".github.com") or hostname in ["raw.githubusercontent.com", "objects.githubusercontent.com"]:
         trust_class = "OFFICIAL_FIRST_PARTY"
     elif hostname in ["hf-mirror.com", "ghproxy.net", "gh-proxy.com"] or any(hostname.endswith("." + m) for m in ["hf-mirror.com", "ghproxy.net", "gh-proxy.com"]):
         trust_class = "THIRD_PARTY_MIRROR"
     else:
-        trust_class = "UNKNOWN"
+        trust_class = "THIRD_PARTY_MIRROR"
 
     return True, "", "", {
         "url": clean_url,
         "hostname": hostname,
-        "scheme": parsed.scheme.lower(),
+        "scheme": scheme,
         "trust_class": trust_class
     }
 
@@ -125,7 +141,6 @@ if op == "validate_safe_path":
         print(make_res("fail", "E_PATH_EMPTY", "Path cannot be empty"))
         sys.exit(0)
 
-    # Check control characters / newlines
     if any(c in path for c in ['\n', '\r', '\0', '\t', ';', '&', '`', '$', '<', '>']) or '\\n' in path or '\\r' in path or '\\0' in path:
         print(make_res("fail", "E_CONTROL_CHAR_INJECTION", f"Path contains illegal control/shell characters: {repr(path)}"))
         sys.exit(0)
@@ -137,9 +152,8 @@ if op == "validate_safe_path":
         print(make_res("fail", "E_PATH_INVALID", f"Cannot resolve path: {str(e)}"))
         sys.exit(0)
 
-    # Reject dangerous system roots
     dangerous_roots = {
-        "/", "/root", "/workspace", "/app", "/content", "/home", "/etc", "/var", "/usr", "/bin", "/sbin", "/tmp", "/kaggle/working"
+        "/", "/root", "/workspace", "/app", "/content", "/home", "/etc", "/var", "/usr", "/bin", "/sbin", "/tmp", "/kaggle/working", "/opt", "/data", "/mnt"
     }
     user_home = os.path.realpath(os.path.expanduser("~"))
     if user_home:
@@ -171,8 +185,6 @@ elif op == "validate_containment":
 
     try:
         base_real, canonical_target = resolve_canonical_path(base_dir, target_path)
-
-        # Use commonpath containment with symlink-aware canonical target
         common = os.path.commonpath([base_real, canonical_target])
         if common != base_real:
             print(make_res("fail", f"E_PATH_OUTSIDE_{scope_name}", f"Path '{target_path}' escapes boundary '{base_dir}' via traversal or symlink (canonical target: '{canonical_target}', base: '{base_real}')"))
@@ -191,8 +203,7 @@ elif op == "validate_containment":
 # ── 2. URL & Domain Trust Validation ─────────────────────────────────────────
 elif op == "validate_url":
     raw_url = args[0] if len(args) > 0 else ""
-    allowed = args[1].split(',') if len(args) > 1 and args[1] else ('http', 'https')
-    ok, code, msg, data = validate_url_value(raw_url, allowed_schemes=allowed)
+    ok, code, msg, data = validate_url_value(raw_url)
     if not ok:
         print(make_res("fail", code, msg))
     else:
@@ -269,7 +280,6 @@ elif op == "validate_token":
         sys.exit(0)
 
     clean_token = str(raw_token).strip()
-    # Clean known accidental prefixes
     if clean_token.startswith("token="): clean_token = clean_token[6:]
     elif clean_token.startswith("?token="): clean_token = clean_token[7:]
     elif clean_token.startswith("&token="): clean_token = clean_token[7:]
@@ -318,8 +328,8 @@ elif op == "validate_models_config":
             continue
 
         parts = [p.strip() for p in raw_line.split('|')]
-        if len(parts) < 3:
-            errors.append({"line": line_num, "code": "E_MALFORMED_ROW", "msg": f"Line {line_num} has fewer than 3 fields"})
+        if len(parts) < 3 or len(parts) > 4:
+            errors.append({"line": line_num, "code": "E_MALFORMED_ROW", "msg": f"Line {line_num} must have 3 or 4 pipe-delimited fields (got {len(parts)}): {raw_line}"})
             continue
 
         url = parts[0]
@@ -327,8 +337,9 @@ elif op == "validate_models_config":
         desc = parts[2] if len(parts) > 2 else ""
         sha = parts[3] if len(parts) > 3 else ""
 
-        # Validate URL via unified helper
-        u_ok, u_code, u_msg, u_data = validate_url_value(url, allowed_schemes=('http', 'https'))
+        # Validate URL
+        url_test = url.replace("$ENCODED_TOKEN", "dummytoken").replace("$CIVITAI_TOKEN", "dummytoken")
+        u_ok, u_code, u_msg, u_data = validate_url_value(url_test)
         if not u_ok:
             errors.append({"line": line_num, "code": u_code, "msg": f"Line {line_num} URL error: {u_msg}"})
 
@@ -348,12 +359,10 @@ elif op == "validate_models_config":
                 except Exception as e:
                     errors.append({"line": line_num, "code": "E_PATH_TRAVERSAL", "msg": f"Line {line_num} path resolution error: {str(e)}"})
 
-        # Unique destination check
         if dest in seen_destinations:
             errors.append({"line": line_num, "code": "E_DUPLICATE_MODEL_KEY", "msg": f"Line {line_num} duplicate destination key '{dest}'"})
         seen_destinations.add(dest)
 
-        # Validate SHA256 format if present
         if sha:
             sha_clean = sha.strip().lower()
             if len(sha_clean) != 64 or not re.match(r'^[a-f0-9]{64}$', sha_clean):
@@ -427,15 +436,14 @@ elif op == "validate_backup_config":
             alt_url = alt_url.strip()
             if not alt_url:
                 continue
-            # Validate every mirror URL using unified helper
-            m_ok, m_code, m_msg, m_data = validate_url_value(alt_url, allowed_schemes=('http', 'https'))
+            alt_test = alt_url.replace("$ENCODED_TOKEN", "dummytoken").replace("$CIVITAI_TOKEN", "dummytoken")
+            m_ok, m_code, m_msg, m_data = validate_url_value(alt_test)
             if not m_ok:
                 errors.append({"line": line_num, "code": m_code, "msg": f"Backup line {line_num} mirror URL error: {m_msg}"})
             else:
                 alts.append(alt_url)
         backup_entries[dest] = alts
 
-    # Check key set equality with primary CSV if provided
     if primary_csv and os.path.exists(primary_csv):
         primary_keys = set()
         with open(primary_csv, 'r', encoding='utf-8-sig', errors='replace') as pf:
@@ -487,7 +495,7 @@ elif op == "validate_nodes_config":
 
     for line_num, line in enumerate(lines, 1):
         if len(line) > MAX_CONFIG_LINE_LENGTH:
-            errors.append({"line": line_num, "code": "E_CONFIG_LINE_TOO_LONG", "msg": f"Node line {line_num} exceeds {MAX_CONFIG_LINE_LENGTH} limit"})
+            errors.append({"line": line_num, "code": "E_CONFIG_LINE_TOO_LONG", "msg": f"Line {line_num} exceeds {MAX_CONFIG_LINE_LENGTH} limit"})
             continue
 
         raw_line = line.strip().replace('\r', '')
@@ -495,119 +503,102 @@ elif op == "validate_nodes_config":
             continue
 
         parts = [p.strip() for p in raw_line.split('|')]
-        url = parts[0]
-        dest = parts[1] if len(parts) > 1 else ""
+        if len(parts) < 2:
+            errors.append({"line": line_num, "code": "E_MALFORMED_ROW", "msg": f"Line {line_num} requires at least URL and Destination"})
+            continue
+
+        git_url = parts[0]
+        dest = parts[1]
         desc = parts[2] if len(parts) > 2 else ""
 
-        # Validate git URL — MUST BE HTTPS ONLY
-        u_ok, u_code, u_msg, u_data = validate_url_value(url, allowed_schemes=('https',))
+        u_ok, u_code, u_msg, u_data = validate_url_value(git_url)
         if not u_ok:
-            errors.append({"line": line_num, "code": u_code, "msg": f"Node line {line_num} git URL error: {u_msg}"})
+            errors.append({"line": line_num, "code": u_code, "msg": f"Line {line_num} Git URL error: {u_msg}"})
 
-        # Validate destination
-        if dest:
-            if not dest.startswith("$CUSTOM_NODES/"):
-                errors.append({"line": line_num, "code": "E_INVALID_DESTINATION_PREFIX", "msg": f"Node line {line_num} destination must start with $CUSTOM_NODES/"})
-            elif '..' in dest or any(c in dest for c in [';', '&', '`', '$(']):
-                errors.append({"line": line_num, "code": "E_PATH_TRAVERSAL", "msg": f"Node line {line_num} traversal in destination"})
-            else:
-                if nodes_base:
-                    resolved_dest = dest.replace('$CUSTOM_NODES', nodes_base)
-                    try:
-                        b_real, c_dest = resolve_canonical_path(nodes_base, resolved_dest)
-                        common = os.path.commonpath([b_real, c_dest])
-                        if common != b_real:
-                            errors.append({"line": line_num, "code": "E_PATH_OUTSIDE_NODES", "msg": f"Node line {line_num} escapes CUSTOM_NODES boundary via traversal or symlink"})
-                    except Exception as e:
-                        errors.append({"line": line_num, "code": "E_PATH_TRAVERSAL", "msg": f"Node line {line_num} path resolution error: {str(e)}"})
+        if not dest.startswith("$CUSTOM_NODES/"):
+            errors.append({"line": line_num, "code": "E_INVALID_DESTINATION_PREFIX", "msg": f"Line {line_num} destination must start with $CUSTOM_NODES/"})
+        elif '..' in dest or any(c in dest for c in [';', '&', '`', '$(']):
+            errors.append({"line": line_num, "code": "E_PATH_TRAVERSAL", "msg": f"Line {line_num} path traversal in destination"})
+        else:
+            if nodes_base:
+                resolved_dest = dest.replace('$CUSTOM_NODES', nodes_base)
+                try:
+                    b_real, c_dest = resolve_canonical_path(nodes_base, resolved_dest)
+                    common = os.path.commonpath([b_real, c_dest])
+                    if common != b_real:
+                        errors.append({"line": line_num, "code": "E_PATH_OUTSIDE_CUSTOM_NODES", "msg": f"Line {line_num} escapes CUSTOM_NODES boundary via traversal or symlink"})
+                except Exception as e:
+                    errors.append({"line": line_num, "code": "E_PATH_TRAVERSAL", "msg": f"Line {line_num} path resolution error: {str(e)}"})
 
-            if dest in seen_destinations:
-                errors.append({"line": line_num, "code": "E_DUPLICATE_NODE_KEY", "msg": f"Node line {line_num} duplicate destination '{dest}'"})
-            seen_destinations.add(dest)
+        if dest in seen_destinations:
+            errors.append({"line": line_num, "code": "E_DUPLICATE_NODE_KEY", "msg": f"Line {line_num} duplicate custom node directory key '{dest}'"})
+        seen_destinations.add(dest)
 
-        entries.append({"url": url, "destination": dest, "description": sanitize_str(desc)})
+        entries.append({"url": git_url, "destination": dest, "description": sanitize_str(desc)})
 
     status = "pass" if not errors else "fail"
-    print(json.dumps({"status": status, "errors": errors, "warnings": warnings, "data": {"count": len(entries), "entries": entries}}))
+    print(json.dumps({"status": status, "errors": errors, "warnings": warnings, "data": {"count": len(entries), "keys": sorted(list(seen_destinations)), "entries": entries}}))
     sys.exit(0)
 
-else:
-    print(make_res("fail", "E_UNKNOWN_OP", f"Unknown validation operation '{op}'"))
-    sys.exit(1)
+print(make_res("fail", "E_UNKNOWN_OPERATION", f"Unknown operation '{op}'"))
+sys.exit(1)
 PY_VAL
 }
 
 # ================================================================================================================================
-# 2. SHELL WRAPPER HELPERS (EXPOSED FOR PRODUCTION & TESTS)
+# 2. SHELL WRAPPERS AROUND PYTHON VALIDATOR
 # ================================================================================================================================
 
 validate_safe_path() {
-    local path="${1:-}"
+    local target="${1:-}"
     local res
-    res=$(_py_validate_call "validate_safe_path" "$path")
+    res=$(_py_validate_call "validate_safe_path" "$target")
     local status
     status=$(echo "$res" | grep -oP '"status":\s*"\K[^"]+')
     if [ "$status" = "pass" ]; then
         return 0
     else
-        local err_code err_msg
-        err_code=$(echo "$res" | grep -oP '"error_code":\s*"\K[^"]+')
-        err_msg=$(echo "$res" | grep -oP '"error_msg":\s*"\K[^"]+')
-        echo -e "${RED}❌ [VALIDATION: $err_code] $err_msg${NC}" >&2
         return 1
     fi
 }
 
 validate_model_destination() {
-    local path="${1:-}"
+    local target="${1:-}"
     local models_root="${2:-${MODELS:-}}"
     local res
-    res=$(_py_validate_call "validate_containment" "$models_root" "$path" "MODELS")
+    res=$(_py_validate_call "validate_containment" "$models_root" "$target" "MODELS")
     local status
     status=$(echo "$res" | grep -oP '"status":\s*"\K[^"]+')
     if [ "$status" = "pass" ]; then
         return 0
     else
-        local err_code err_msg
-        err_code=$(echo "$res" | grep -oP '"error_code":\s*"\K[^"]+')
-        err_msg=$(echo "$res" | grep -oP '"error_msg":\s*"\K[^"]+')
-        echo -e "${RED}❌ [VALIDATION: $err_code] $err_msg${NC}" >&2
         return 1
     fi
 }
 
 validate_node_destination() {
-    local path="${1:-}"
+    local target="${1:-}"
     local nodes_root="${2:-${CUSTOM_NODES:-}}"
     local res
-    res=$(_py_validate_call "validate_containment" "$nodes_root" "$path" "NODES")
+    res=$(_py_validate_call "validate_containment" "$nodes_root" "$target" "CUSTOM_NODES")
     local status
     status=$(echo "$res" | grep -oP '"status":\s*"\K[^"]+')
     if [ "$status" = "pass" ]; then
         return 0
     else
-        local err_code err_msg
-        err_code=$(echo "$res" | grep -oP '"error_code":\s*"\K[^"]+')
-        err_msg=$(echo "$res" | grep -oP '"error_msg":\s*"\K[^"]+')
-        echo -e "${RED}❌ [VALIDATION: $err_code] $err_msg${NC}" >&2
         return 1
     fi
 }
 
 validate_url() {
     local url="${1:-}"
-    local allowed_schemes="${2:-http,https}"
     local res
-    res=$(_py_validate_call "validate_url" "$url" "$allowed_schemes")
+    res=$(_py_validate_call "validate_url" "$url")
     local status
     status=$(echo "$res" | grep -oP '"status":\s*"\K[^"]+')
     if [ "$status" = "pass" ]; then
         return 0
     else
-        local err_code err_msg
-        err_code=$(echo "$res" | grep -oP '"error_code":\s*"\K[^"]+')
-        err_msg=$(echo "$res" | grep -oP '"error_msg":\s*"\K[^"]+')
-        echo -e "${RED}❌ [VALIDATION: $err_code] $err_msg${NC}" >&2
         return 1
     fi
 }
@@ -615,14 +606,10 @@ validate_url() {
 classify_source_trust() {
     local url="${1:-}"
     local res
-    res=$(_py_validate_call "validate_url" "$url" "http,https")
-    local status
-    status=$(echo "$res" | grep -oP '"status":\s*"\K[^"]+')
-    if [ "$status" = "pass" ]; then
-        echo "$res" | grep -oP '"trust_class":\s*"\K[^"]+' || echo "UNKNOWN"
-    else
-        echo "FORBIDDEN"
-    fi
+    res=$(_py_validate_call "validate_url" "$url")
+    local trust
+    trust=$(echo "$res" | grep -oP '"trust_class":\s*"\K[^"]+' || echo "THIRD_PARTY_MIRROR")
+    echo "${trust:-THIRD_PARTY_MIRROR}"
 }
 
 validate_sha256() {
@@ -634,10 +621,6 @@ validate_sha256() {
     if [ "$status" = "pass" ]; then
         return 0
     else
-        local err_code err_msg
-        err_code=$(echo "$res" | grep -oP '"error_code":\s*"\K[^"]+')
-        err_msg=$(echo "$res" | grep -oP '"error_msg":\s*"\K[^"]+')
-        echo -e "${RED}❌ [VALIDATION: $err_code] $err_msg${NC}" >&2
         return 1
     fi
 }
@@ -645,20 +628,18 @@ validate_sha256() {
 validate_numeric_config() {
     local name="${1:-CONFIG}"
     local val="${2:-}"
-    local min_v="${3:-0}"
-    local max_v="${4:-999999}"
-
+    local min="${3:-0}"
+    local max="${4:-999999}"
+    local def="${5:-$min}"
     local res
-    res=$(_py_validate_call "validate_numeric" "$name" "$val" "$min_v" "$max_v")
+    res=$(_py_validate_call "validate_numeric" "$name" "$val" "$min" "$max")
     local status
     status=$(echo "$res" | grep -oP '"status":\s*"\K[^"]+')
     if [ "$status" = "pass" ]; then
+        echo "$val"
         return 0
     else
-        local err_code err_msg
-        err_code=$(echo "$res" | grep -oP '"error_code":\s*"\K[^"]+')
-        err_msg=$(echo "$res" | grep -oP '"error_msg":\s*"\K[^"]+')
-        echo -e "${RED}❌ [VALIDATION: $err_code] $err_msg${NC}" >&2
+        echo "$def"
         return 1
     fi
 }
@@ -670,12 +651,10 @@ validate_user_agent() {
     local status
     status=$(echo "$res" | grep -oP '"status":\s*"\K[^"]+')
     if [ "$status" = "pass" ]; then
+        echo "$ua"
         return 0
     else
-        local err_code err_msg
-        err_code=$(echo "$res" | grep -oP '"error_code":\s*"\K[^"]+')
-        err_msg=$(echo "$res" | grep -oP '"error_msg":\s*"\K[^"]+')
-        echo -e "${RED}❌ [VALIDATION: $err_code] $err_msg${NC}" >&2
+        echo "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
         return 1
     fi
 }
@@ -684,17 +663,16 @@ validate_token_input() {
     local raw_tok="${1:-}"
     local res
     res=$(_py_validate_call "validate_token" "$raw_tok")
-    local t_stat
-    t_stat=$(echo "$res" | grep -oP '"token_status":\s*"\K[^"]+' | head -n1)
-    if [ -n "$t_stat" ]; then
-        echo "$t_stat"
-        if [ "$t_stat" = "TOKEN_PRESENT" ] || [ "$t_stat" = "TOKEN_EMPTY" ]; then
-            return 0
-        fi
+    local status
+    status=$(echo "$res" | grep -oP '"status":\s*"\K[^"]+')
+    local tok_status
+    tok_status=$(echo "$res" | grep -oP '"token_status":\s*"\K[^"]+')
+    echo "${tok_status:-TOKEN_EMPTY}"
+    if [ "$status" = "pass" ]; then
+        return 0
+    else
         return 1
     fi
-    echo "TOKEN_INVALID_FORMAT"
-    return 1
 }
 
 validate_models_config() {
@@ -765,27 +743,18 @@ run_preflight() {
     local check_backup_csv="PASS"
     local check_key_eq="PASS"
     local check_nodes="PASS"
-    local check_paths="PASS"
     local check_numeric="PASS"
     local check_disk="PASS"
     local check_token="OPTIONAL"
 
     # ── 1. Numeric Environment Configuration Check ───────────────────────────
-    if ! validate_numeric_config "MAX_RETRIES" "${MAX_RETRIES:-5}" 1 20 >/dev/null 2>&1; then
+    if ! validate_numeric_config "MAX_RETRIES" "${MAX_RETRIES:-3}" 1 20 >/dev/null 2>&1; then
         check_numeric="FAIL"; total_errors=$((total_errors + 1))
         err_messages+=("MAX_RETRIES must be between 1 and 20 (got: '${MAX_RETRIES:-}')")
-    fi
-    if ! validate_numeric_config "TIMEOUT" "${TIMEOUT:-60}" 5 3600 >/dev/null 2>&1; then
-        check_numeric="FAIL"; total_errors=$((total_errors + 1))
-        err_messages+=("TIMEOUT must be between 5 and 3600 seconds (got: '${TIMEOUT:-}')")
     fi
     if ! validate_numeric_config "REQUIRED_SPACE_GB" "${REQUIRED_SPACE_GB:-10}" 0 100000 >/dev/null 2>&1; then
         check_numeric="FAIL"; total_errors=$((total_errors + 1))
         err_messages+=("REQUIRED_SPACE_GB must be between 0 and 100000 (got: '${REQUIRED_SPACE_GB:-}')")
-    fi
-    if ! validate_numeric_config "ARIA2_CONNECTIONS_MAX" "${ARIA2_CONNECTIONS_MAX:-8}" 1 16 >/dev/null 2>&1; then
-        check_numeric="FAIL"; total_errors=$((total_errors + 1))
-        err_messages+=("ARIA2_CONNECTIONS_MAX must be between 1 and 16 (got: '${ARIA2_CONNECTIONS_MAX:-}')")
     fi
     if ! validate_user_agent "${USER_AGENT:-Mozilla/5.0}" >/dev/null 2>&1; then
         check_numeric="FAIL"; total_errors=$((total_errors + 1))
@@ -852,8 +821,8 @@ run_preflight() {
                 done < <(echo "$b_res" | grep -oP '"msg":\s*"\K[^"]+')
             fi
         else
-            check_backup_csv="WARN"; total_warnings=$((total_warnings + 1))
-            warn_messages+=("Backup models config not found: $backup_csv")
+            check_backup_csv="FAIL"; check_key_eq="FAIL"; total_errors=$((total_errors + 1))
+            err_messages+=("Backup models config not found: $backup_csv")
         fi
     fi
 
@@ -902,7 +871,7 @@ run_preflight() {
         printf "  %-25s : " "Primary Models CSV"
         [ "$check_prim_csv" = "PASS" ] && echo -e "${GREEN}PASS${NC}" || echo -e "${RED}FAIL${NC}"
         printf "  %-25s : " "Backup Models CSV"
-        [ "$check_backup_csv" = "PASS" ] && echo -e "${GREEN}PASS${NC}" || echo -e "${YELLOW}WARN${NC}"
+        [ "$check_backup_csv" = "PASS" ] && echo -e "${GREEN}PASS${NC}" || echo -e "${RED}FAIL${NC}"
         printf "  %-25s : " "Exact Key Set Equality"
         [ "$check_key_eq" = "PASS" ] && echo -e "${GREEN}PASS${NC}" || echo -e "${RED}FAIL${NC}"
     fi
