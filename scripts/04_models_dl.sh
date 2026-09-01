@@ -84,7 +84,7 @@ run_stage_04() {
     echo -e "${MAGENTA}🚀 Stage 04: Bắt đầu tải Models với cơ chế Multi-Mirror Fallback...${NC}"
     echo -e "${MAGENTA}════════════════════════════════════════════════════════════════${NC}"
 
-    mkdir -p "$MODELS"/checkpoints/IL \
+    mkdir -p "$MODELS"/checkpoints/{IL,SDXL} \
              "$MODELS"/controlnet \
              "$MODELS"/loras/{Quality,Face,Hands,Character,Style,Effect,Pose} \
              "$MODELS"/vae \

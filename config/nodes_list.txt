@@ -43,4 +43,4 @@ https://github.com/daveinme/ComfyUI-Cloud-Manager.git|$CUSTOM_NODES/ComfyUI-Clou
 https://github.com/ssitu/ComfyUI_UltimateSDUpscale.git|$CUSTOM_NODES/ComfyUI_UltimateSDUpscale|Ultimate SD Upscale
 
 # 14. TRELLIS2: Công cụ tạo vật thể mô hình 3D (3D Mesh / Texture / Shape) trực tiếp từ bức ảnh 2D.
-https://github.com/PozzettiAndrea/ComfyUI-TRELLIS2.git|$CUSTOM_NODES/ComfyUI-TRELLIS2|TRELLIS2
+https://github.com/PozzettiAndrea/ComfyUI-TRELLIS2.git|$CUSTOM_NODES/ComfyUI-TRELLIS2|TRELLIS.2 Image-to-3D, tạo mesh PBR và xuất GLB

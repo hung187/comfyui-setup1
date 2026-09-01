@@ -10,6 +10,10 @@ https://civitai.com/api/download/models/1546777?fileId=1446530&token=$ENCODED_TO
 https://civitai.com/api/download/models/1828803?fileId=1729137&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/ultimateHentaiAnimeRXTRexAnime_rxV1.safetensors|Ultimate Hentai Anime RXTRexAnime rxV1|566f0cfb40a12ad48536245047a2d962e6d1f7d345e39ed7ddf10474891dc83c
 https://civitai.com/api/download/models/2883731?fileId=2763986&token=$ENCODED_TOKEN|$MODELS/checkpoints/IL/waiIllustriousSDXL_v170.safetensors|WAI Illustrious SDXL v17.0|f116b0c78ff441467b0cdc8f1936e1ed18ea31e9997c7b132b1b8db533f0bd04
 
+# --- CHECKPOINTS (SDXL) ---
+https://civitai.com/api/download/models/1759168?fileId=1659952&token=$ENCODED_TOKEN|$MODELS/checkpoints/SDXL/juggernautXL_ragnarok.safetensors|Juggernaut XL Ragnarok - Cinematic checkpoint cho hành tinh và không gian|dd08fa32f98d05a2443ca1419e46df1575a0811f6e3b246d9dd47ff20f5eb66a
+https://civitai.com/api/download/models/789646?fileId=703211&token=$ENCODED_TOKEN|$MODELS/checkpoints/SDXL/realvisxlV50_v50Bakedvae.safetensors|RealVisXL V5.0 BakedVAE - Photoreal checkpoint cho hành tinh và nền không gian|6a35a7855770ae9820a3c931d4964c3817b6d9e3c6f9c4dabb5b3a94e5643b80
+
 # --- CONTROLNET ---
 https://huggingface.co/lllyasviel/sd_control_collection/resolve/main/thibaud_xl_openpose.safetensors|$MODELS/controlnet/controlnet_openpose_xl.safetensors|ControlNet OpenPose XL|
 https://civitai.com/api/download/models/1053985?fileId=959944&token=$ENCODED_TOKEN|$MODELS/controlnet/illustriousXLCanny_v10.safetensors|Illustrious XL Canny v1.0|e14d12e39587f3269f73f62c16734262b8ded6f47f102b953a708a6b4c6e5974

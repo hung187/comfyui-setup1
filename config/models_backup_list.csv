@@ -10,6 +10,10 @@ $MODELS/checkpoints/IL/illustriousXL20_v20.safetensors|https://huggingface.co/On
 $MODELS/checkpoints/IL/ultimateHentaiAnimeRXTRexAnime_rxV1.safetensors|https://civitai.com/api/download/models/1828803?fileId=1729137&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1828803?fileId=1729137|
 $MODELS/checkpoints/IL/waiIllustriousSDXL_v170.safetensors|https://civitai.com/api/download/models/2883731?fileId=2763986&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2883731?fileId=2763986|
 
+# --- CHECKPOINTS (SDXL) ---
+$MODELS/checkpoints/SDXL/juggernautXL_ragnarok.safetensors|https://civitai.com/api/download/models/1759168?fileId=1659952&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1759168?fileId=1659952|
+$MODELS/checkpoints/SDXL/realvisxlV50_v50Bakedvae.safetensors|https://civitai.com/api/download/models/789646?fileId=703211&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/789646?fileId=703211|
+
 # --- CONTROLNET ---
 $MODELS/controlnet/controlnet_openpose_xl.safetensors|https://hf-mirror.com/lllyasviel/sd_control_collection/resolve/main/thibaud_xl_openpose.safetensors|https://huggingface.co/thibaud/controlnet-openpose-sdxl-1.0/resolve/main/OpenPoseXL2.safetensors?download=true|https://hf.co/lllyasviel/sd_control_collection/resolve/main/thibaud_xl_openpose.safetensors
 $MODELS/controlnet/illustriousXLCanny_v10.safetensors|https://civitai.com/api/download/models/1053985?fileId=959944&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1053985?fileId=959944|
