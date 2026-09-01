@@ -33,6 +33,11 @@ run_stage_02() {
             return 1
         fi
     fi
+
+    if [ -f "$COMFY_BASE/requirements.txt" ]; then
+        echo -e "   ${BLUE}📦 Cài đặt thư viện phụ thuộc ComfyUI Core...${NC}"
+        install_requirements "$COMFY_BASE" || true
+    fi
     return 0
 }
 
