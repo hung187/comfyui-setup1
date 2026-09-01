@@ -21,7 +21,17 @@ run_stage_02() {
         echo -e "   ${GREEN}✅ Phát hiện ComfyUI sẵn có (không dùng Git repo).${NC}"
     else
         echo -e "   ${BLUE}📦 Tải mới ComfyUI Core từ GitHub...${NC}"
-        clone_or_pull "https://github.com/comfyanonymous/ComfyUI.git" "$COMFY_BASE" "ComfyUI Core"
+        local temp_core
+        temp_core=$(mktemp -d)
+        if env ${GIT_SSL_ENV:-} git clone --quiet --depth 1 "https://github.com/comfyanonymous/ComfyUI.git" "$temp_core"; then
+            cp -rn "$temp_core"/. "$COMFY_BASE"/ 2>/dev/null || cp -r "$temp_core"/* "$COMFY_BASE"/ 2>/dev/null || true
+            rm -rf "$temp_core"
+            echo -e "   ${GREEN}✅ Cài đặt ComfyUI Core thành công.${NC}"
+        else
+            rm -rf "$temp_core"
+            echo -e "   ${RED}❌ Tải ComfyUI Core thất bại.${NC}"
+            return 1
+        fi
     fi
     return 0
 }

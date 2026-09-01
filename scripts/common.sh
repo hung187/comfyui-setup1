@@ -1393,7 +1393,7 @@ clone_or_pull() {
         echo -e "   ${RED}❌ Đường dẫn clone/pull không an toàn: '$target_dir'${NC}"
         return 1
     fi
-    if [ -n "${CUSTOM_NODES:-}" ] && ! validate_node_destination "$target_dir" "$CUSTOM_NODES" 2>/dev/null; then
+    if [ -n "${CUSTOM_NODES:-}" ] && [ "$target_dir" != "${COMFY_BASE:-}" ] && ! validate_node_destination "$target_dir" "$CUSTOM_NODES" 2>/dev/null; then
         echo -e "   ${RED}❌ Đường dẫn clone nằm ngoài thư mục CUSTOM_NODES: '$target_dir'${NC}"
         return 1
     fi
