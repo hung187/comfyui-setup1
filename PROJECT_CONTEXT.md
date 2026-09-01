@@ -28,13 +28,14 @@ install.sh (Entry point)
 
 ## 4. Trạng Thái Release
 - **Remote**: `git@github.com:hung187/comfyui-setup1.git` (branch `main`)
-- **HEAD Commit**: `10e32e69c88b34afa55cdc4d24074d534fd0cbe4` (`fix: harden two-stage GPU setup and runtime safety`)
+- **HEAD Commit**: `4967ca5c132277685180d6b4e4b47b1f6e12af8f` (`fix: install ComfyUI Core requirements during stage 02`)
 - **Remote CI**: GitHub Actions Quality Gate — **PASS (100% Success)**
 - **Regression Tests**: 11/11 Groups PASS, 39/39 Scenarios PASS, 113/113 Assertions PASS.
-- **Production Safety**:
-  - Two-Stage GPU Pod Workflow (`install_nodes.sh` -> Pod restart -> `install_models.sh`).
-  - Zero-Secret Persistence Canary Verified.
-  - Strict HTTPS-only in production with test-only loopback HTTP gate.
-  - Strict Provider Path Auto-Discovery with fail-closed ambiguity & non-existent checks.
-  - Local default for `reload.sh` (opt-in `--tunnel` only).
-- **Preflight Mode**: `./install.sh --validate`, `./install_nodes.sh --validate`, `./install_models.sh --validate` (Read-only, zero filesystem mutations).
+- **Live GPU Test (EzyCloud RTX 3070 8GB)**:
+  - `install_nodes.sh`: Clean installation, 0 tunnels opened, 0 auto-reload.
+  - `install_models.sh`: 20 downloads OK / 19 verified models on disk (46.8 GB), 27 Civitai-token-gated models failed gracefully with full logging.
+  - Production resume: Verified working.
+  - ComfyUI startup: Started on CUDA:0 with 8049 MB free VRAM.
+  - Workflow execution: SDXL Juggernaut Ragnarok test prompt generated successfully in 11.60s.
+  - Verdict: `PARTIAL — GPU VRAM insufficient for SDXL/TRELLIS acceptance` (8 GB < 16 GB required for TRELLIS.2).
+
