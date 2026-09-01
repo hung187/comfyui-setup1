@@ -23,11 +23,6 @@ https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter_sdxl_v
 https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors|$MODELS/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors|CLIP ViT-H-14|
 https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/clip_vision/dino_v3_vit_l.safetensors?download=true|$MODELS/clip_vision/dino_v3_vit_l.safetensors|DINO v3 ViT-L|
 
-# --- FACE RESTORE & INSIGHTFACE ---
-https://huggingface.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx|$MODELS/insightface/inswapper_128.onnx|InsightFace inswapper_128|
-https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth|$MODELS/facerestore/codeformer-v0.1.0.pth|CodeFormer v0.1.0|
-https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth|$MODELS/facexlib/detection_Resnet50_Final.pth|FaceXLib Detection Resnet50 Final|
-
 # --- VAE ---
 https://civitai.com/api/download/models/785437?fileId=698889&token=$ENCODED_TOKEN|$MODELS/vae/ponyStandardVAE_v10.safetensors|Pony Standard VAE v1.0|0e4fd8736bb998fccf9f659ff69995f6bb3241fce0e7fc595f5842b36e27fabe
 https://huggingface.co/Comfy-Org/TRELLIS.2/resolve/main/vae/trellis_2_shape_vae_bf16.safetensors?download=true|$MODELS/vae/trellis_2_shape_vae_bf16.safetensors|Trellis.2 Shape VAE BF16|
@@ -66,4 +61,3 @@ https://civitai.com/api/download/models/2110221?fileId=2004903&token=$ENCODED_TO
 https://civitai.com/api/download/models/2073605?fileId=1969798&token=$ENCODED_TOKEN|$MODELS/loras/Pose/NSFW-22-H-e8.safetensors|NSFW Pose LoRA|34e2144d3cd65360f97d09ccbe03e1c39a096df6c9234af5fe3899d1b63cda39
 https://civitai.com/api/download/models/1058897?fileId=964472&token=$ENCODED_TOKEN|$MODELS/loras/Pose/Midis_Defeat2_IL.safetensors|Midis Defeat2 IL|8bbc3e10ffaaba14470392be5439c19ee055d1e546ce5c9270eb0b78578182a0
 https://civitai.com/api/download/models/936014?fileId=843344&token=$ENCODED_TOKEN|$MODELS/loras/Pose/Fumihiko_Defeat_PONY.safetensors|Fumihiko Defeat PONY|0e59e161ba925e1a12ee119a95a501137d117c731bbad94cf0ed01f79be6dacc
-https://civitai.com/api/download/models/2196580?fileId=2094818&token=$ENCODED_TOKEN|$MODELS/loras/Pose/phong_cach-hands-free_blowjob-IL.safetensors|Hands-Free Blowjob (IL)|

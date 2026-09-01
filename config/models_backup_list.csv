@@ -23,11 +23,6 @@ $MODELS/ipadapter/ip-adapter_sdxl_vit-h.safetensors|https://hf-mirror.com/h94/IP
 $MODELS/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors|https://hf-mirror.com/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors|https://hf.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors|
 $MODELS/clip_vision/dino_v3_vit_l.safetensors|https://hf-mirror.com/Comfy-Org/TRELLIS.2/resolve/main/clip_vision/dino_v3_vit_l.safetensors?download=true|https://hf.co/Comfy-Org/TRELLIS.2/resolve/main/clip_vision/dino_v3_vit_l.safetensors?download=true|
 
-# --- INSIGHTFACE & FACE RESTORE ---
-$MODELS/insightface/inswapper_128.onnx|https://huggingface.co/Gourieff/ReActor/resolve/main/models/insightface/inswapper_128.onnx|https://hf-mirror.com/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx|https://hf.co/ezioruan/inswapper_128.onnx/resolve/main/inswapper_128.onnx
-$MODELS/facerestore/codeformer-v0.1.0.pth|https://huggingface.co/sczhou/CodeFormer/resolve/main/codeformer.pth|https://ghproxy.net/https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth|https://gh-proxy.com/https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth
-$MODELS/facexlib/detection_Resnet50_Final.pth|https://ghproxy.net/https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth|https://gh-proxy.com/https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth|
-
 # --- VAE ---
 $MODELS/vae/ponyStandardVAE_v10.safetensors|https://civitai.com/api/download/models/785437?fileId=698889&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/785437?fileId=698889|
 $MODELS/vae/trellis_2_shape_vae_bf16.safetensors|https://hf-mirror.com/Comfy-Org/TRELLIS.2/resolve/main/vae/trellis_2_shape_vae_bf16.safetensors?download=true|https://hf.co/Comfy-Org/TRELLIS.2/resolve/main/vae/trellis_2_shape_vae_bf16.safetensors?download=true|
@@ -64,4 +59,3 @@ $MODELS/loras/Effect/da_bong-shiny_wet_skin_v2.safetensors|https://civitai.com/a
 $MODELS/loras/Pose/NSFW-22-H-e8.safetensors|https://civitai.com/api/download/models/2073605?fileId=1969798&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2073605?fileId=1969798|
 $MODELS/loras/Pose/Midis_Defeat2_IL.safetensors|https://civitai.com/api/download/models/1058897?fileId=964472&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/1058897?fileId=964472|
 $MODELS/loras/Pose/Fumihiko_Defeat_PONY.safetensors|https://civitai.com/api/download/models/936014?fileId=843344&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/936014?fileId=843344|
-$MODELS/loras/Pose/phong_cach-hands-free_blowjob-IL.safetensors|https://civitai.com/api/download/models/2196580?fileId=2094818&token=$ENCODED_TOKEN|https://civitai.com/api/download/models/2196580?fileId=2094818|
