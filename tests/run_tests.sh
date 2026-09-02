@@ -33,6 +33,7 @@ source "$REPO_ROOT/scripts/validation.sh"
 source "$REPO_ROOT/scripts/common.sh"
 source "$REPO_ROOT/scripts/04_models_dl.sh"
 source "$REPO_ROOT/scripts/update_mirror_list.sh"
+source "$REPO_ROOT/scripts/06_gdrive_sync.sh"
 source "$REPO_ROOT/fix_nodes.sh"
 
 set +e
@@ -998,6 +999,446 @@ assert_true "reload.sh does not spawn cloudflared tunnel by default" $?
 end_scenario
 
 [ $G11_OK -eq 1 ] && TEST_GROUPS_PASSED=$((TEST_GROUPS_PASSED + 1))
+
+
+echo -e "\n=== [ GROUP 12: AUTOMATIC 3D OUTPUT GOOGLE DRIVE SYNC & FLOCK GUARD ] ==="
+TEST_GROUPS_RUN=$((TEST_GROUPS_RUN + 1))
+G12_OK=1
+
+# Setup mock rclone binary and mock remote storage for Group 12
+MOCK_BIN_DIR="$TEST_ROOT/mock_bin"
+MOCK_REMOTE_STORE="$TEST_ROOT/mock_gdrive_store"
+MOCK_RCLONE_LOG="$TEST_ROOT/mock_rclone.log"
+mkdir -p "$MOCK_BIN_DIR" "$MOCK_REMOTE_STORE"
+
+cat > "$MOCK_BIN_DIR/rclone" <<'MOCK_RCLONE_EOF'
+#!/bin/bash
+MOCK_REMOTE_ROOT="${MOCK_REMOTE_ROOT:-/tmp/mock_rclone_store}"
+MOCK_LOG="${MOCK_RCLONE_LOG:-/tmp/mock_rclone.log}"
+
+echo "rclone $*" >> "$MOCK_LOG"
+
+if [ "${MOCK_RCLONE_FAIL:-0}" = "1" ]; then
+    exit 1
+fi
+
+cmd="$1"
+shift
+
+case "$cmd" in
+    listremotes)
+        if [ -n "${RCLONE_CONFIG_PATH:-}" ]; then
+            if [ -f "$RCLONE_CONFIG_PATH" ]; then
+                grep -oP '^\[\K[^\]]+' "$RCLONE_CONFIG_PATH" 2>/dev/null | sed 's/$/:/'
+            fi
+        else
+            echo "gdrive:"
+        fi
+        exit 0
+        ;;
+    lsd)
+        target="$1"
+        if [[ "$target" == "invalid_nonexistent_remote:"* ]]; then
+            exit 1
+        fi
+        exit 0
+        ;;
+    mkdir)
+        target="$1"
+        rel="${target#*:}"
+        mkdir -p "$MOCK_REMOTE_ROOT/$rel"
+        exit 0
+        ;;
+    copyto)
+        src="$1"
+        dst="$2"
+        dst_rel="${dst#*:}"
+        mkdir -p "$(dirname "$MOCK_REMOTE_ROOT/$dst_rel")"
+        cp "$src" "$MOCK_REMOTE_ROOT/$dst_rel"
+        exit 0
+        ;;
+    lsf)
+        target=""
+        for arg in "$@"; do
+            if [[ "$arg" == *":"* ]]; then
+                target="$arg"
+            fi
+        done
+        rel="${target#*:}"
+        if [ -f "$MOCK_REMOTE_ROOT/$rel" ]; then
+            stat -c%s "$MOCK_REMOTE_ROOT/$rel" 2>/dev/null || wc -c < "$MOCK_REMOTE_ROOT/$rel"
+            exit 0
+        fi
+        exit 1
+        ;;
+    moveto)
+        src="$1"
+        dst="$2"
+        src_rel="${src#*:}"
+        dst_rel="${dst#*:}"
+        mkdir -p "$(dirname "$MOCK_REMOTE_ROOT/$dst_rel")"
+        mv "$MOCK_REMOTE_ROOT/$src_rel" "$MOCK_REMOTE_ROOT/$dst_rel"
+        exit 0
+        ;;
+    deletefile)
+        target="$1"
+        rel="${target#*:}"
+        rm -f "$MOCK_REMOTE_ROOT/$rel"
+        exit 0
+        ;;
+    --version|version)
+        echo "rclone v1.65.0-mock"
+        exit 0
+        ;;
+    *)
+        exit 0
+        ;;
+esac
+MOCK_RCLONE_EOF
+chmod +x "$MOCK_BIN_DIR/rclone"
+
+export MOCK_REMOTE_ROOT="$MOCK_REMOTE_STORE"
+export MOCK_RCLONE_LOG="$MOCK_RCLONE_LOG"
+OLD_PATH="$PATH"
+export PATH="$MOCK_BIN_DIR:$PATH"
+
+# Test Sandbox for ComfyUI 3D Output
+G12_COMFY_BASE="$TEST_ROOT/comfy_3d_sandbox"
+G12_OUTPUT_DIR="$G12_COMFY_BASE/output"
+mkdir -p "$G12_OUTPUT_DIR/trellis_sub" "$G12_COMFY_BASE/models" "$G12_COMFY_BASE/custom_nodes"
+
+# Scenario 12.1: 3D Whitelist File Selection & Nested Directory Preservation
+start_scenario "12.1: 3D Whitelist File Selection & Nested Directory Preservation"
+echo "glb_data_payload_123" > "$G12_OUTPUT_DIR/model.glb"
+echo "gltf_data_payload_456" > "$G12_OUTPUT_DIR/scene.gltf"
+echo "obj_geometry_data" > "$G12_OUTPUT_DIR/mesh.obj"
+echo "mtl_material_data" > "$G12_OUTPUT_DIR/mesh.mtl"
+echo "png_texture_data" > "$G12_OUTPUT_DIR/texture.png"
+echo "jpg_texture_data" > "$G12_OUTPUT_DIR/photo.jpg"
+echo "jpeg_texture_data" > "$G12_OUTPUT_DIR/image.jpeg"
+echo "webp_texture_data" > "$G12_OUTPUT_DIR/render.webp"
+echo '{"nodes": []}' > "$G12_OUTPUT_DIR/workflow.json"
+echo "nested_glb_data" > "$G12_OUTPUT_DIR/trellis_sub/nested_mesh.glb"
+
+is_valid_3d_output_file "$G12_OUTPUT_DIR/model.glb" "$G12_OUTPUT_DIR"; assert_true ".glb recognized as valid 3D output" $?
+is_valid_3d_output_file "$G12_OUTPUT_DIR/scene.gltf" "$G12_OUTPUT_DIR"; assert_true ".gltf recognized as valid 3D output" $?
+is_valid_3d_output_file "$G12_OUTPUT_DIR/mesh.obj" "$G12_OUTPUT_DIR"; assert_true ".obj recognized as valid 3D output" $?
+is_valid_3d_output_file "$G12_OUTPUT_DIR/mesh.mtl" "$G12_OUTPUT_DIR"; assert_true ".mtl recognized as valid 3D output" $?
+is_valid_3d_output_file "$G12_OUTPUT_DIR/texture.png" "$G12_OUTPUT_DIR"; assert_true ".png recognized as valid texture" $?
+is_valid_3d_output_file "$G12_OUTPUT_DIR/photo.jpg" "$G12_OUTPUT_DIR"; assert_true ".jpg recognized as valid texture" $?
+is_valid_3d_output_file "$G12_OUTPUT_DIR/image.jpeg" "$G12_OUTPUT_DIR"; assert_true ".jpeg recognized as valid texture" $?
+is_valid_3d_output_file "$G12_OUTPUT_DIR/render.webp" "$G12_OUTPUT_DIR"; assert_true ".webp recognized as valid texture" $?
+is_valid_3d_output_file "$G12_OUTPUT_DIR/workflow.json" "$G12_OUTPUT_DIR"; assert_true ".json recognized as valid workflow" $?
+is_valid_3d_output_file "$G12_OUTPUT_DIR/trellis_sub/nested_mesh.glb" "$G12_OUTPUT_DIR"; assert_true "Nested 3D file recognized" $?
+
+[ $SCENARIO_OK -eq 0 ] && G12_OK=0
+end_scenario
+
+# Scenario 12.2: Strict Blacklist & Prohibited Exclusion Gate
+start_scenario "12.2: Strict Blacklist & Prohibited Exclusion Gate"
+echo "model_weights" > "$G12_COMFY_BASE/models/test.safetensors"
+echo "custom_node_code" > "$G12_COMFY_BASE/custom_nodes/node.py"
+echo "part_download" > "$G12_OUTPUT_DIR/model.glb.part"
+echo "tmp_file" > "$G12_OUTPUT_DIR/temp.tmp"
+echo "partial_file" > "$G12_OUTPUT_DIR/render.partial"
+echo "crdownload_file" > "$G12_OUTPUT_DIR/model.glb.crdownload"
+echo "lock_file" > "$G12_OUTPUT_DIR/sync.lock"
+echo "pid_file" > "$G12_OUTPUT_DIR/watcher.pid"
+echo "log_file" > "$G12_OUTPUT_DIR/error.log"
+echo "meta_json" > "$G12_OUTPUT_DIR/model.safetensors.meta.json"
+echo '{"state": "done"}' > "$G12_OUTPUT_DIR/download_state.json"
+echo '{"report": "ok"}' > "$G12_OUTPUT_DIR/setup_report.json"
+echo "secret_token" > "$G12_OUTPUT_DIR/secret_token.txt"
+echo "hidden" > "$G12_OUTPUT_DIR/.hidden.glb"
+
+! is_valid_3d_output_file "$G12_COMFY_BASE/models/test.safetensors" "$G12_OUTPUT_DIR"; assert_true "models/ directory excluded" $?
+! is_valid_3d_output_file "$G12_COMFY_BASE/custom_nodes/node.py" "$G12_OUTPUT_DIR"; assert_true "custom_nodes/ directory excluded" $?
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/model.glb.part" "$G12_OUTPUT_DIR"; assert_true ".part files excluded" $?
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/temp.tmp" "$G12_OUTPUT_DIR"; assert_true ".tmp files excluded" $?
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/render.partial" "$G12_OUTPUT_DIR"; assert_true ".partial files excluded" $?
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/model.glb.crdownload" "$G12_OUTPUT_DIR"; assert_true ".crdownload files excluded" $?
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/sync.lock" "$G12_OUTPUT_DIR"; assert_true ".lock files excluded" $?
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/watcher.pid" "$G12_OUTPUT_DIR"; assert_true ".pid files excluded" $?
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/error.log" "$G12_OUTPUT_DIR"; assert_true ".log files excluded" $?
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/model.safetensors.meta.json" "$G12_OUTPUT_DIR"; assert_true ".meta.json excluded" $?
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/download_state.json" "$G12_OUTPUT_DIR"; assert_true "download_state.json excluded" $?
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/setup_report.json" "$G12_OUTPUT_DIR"; assert_true "setup_report.json excluded" $?
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/secret_token.txt" "$G12_OUTPUT_DIR"; assert_true "secret/txt files excluded" $?
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/.hidden.glb" "$G12_OUTPUT_DIR"; assert_true "Hidden dotfiles excluded" $?
+
+[ $SCENARIO_OK -eq 0 ] && G12_OK=0
+end_scenario
+
+# Scenario 12.3: Zero-Byte & Unstable File Write Protection
+start_scenario "12.3: Zero-Byte & Incomplete File Write Protection"
+touch "$G12_OUTPUT_DIR/empty.glb"
+! is_valid_3d_output_file "$G12_OUTPUT_DIR/empty.glb" "$G12_OUTPUT_DIR"
+assert_true "Zero-byte file rejected immediately by validation filter" $?
+
+wait_for_file_stable "$G12_OUTPUT_DIR/model.glb" 3 0.2
+assert_true "Stable file passes wait_for_file_stable" $?
+
+! wait_for_file_stable "$G12_OUTPUT_DIR/nonexistent.glb" 2 0.2
+assert_true "Nonexistent file fails wait_for_file_stable" $?
+
+[ $SCENARIO_OK -eq 0 ] && G12_OK=0
+end_scenario
+
+# Scenario 12.4: Atomic Remote Staging Protocol (.partial -> verify -> moveto)
+start_scenario "12.4: Atomic Remote Staging Protocol (.partial -> verify -> moveto)"
+rm -f "$MOCK_RCLONE_LOG"
+test_3d_file="$G12_OUTPUT_DIR/trellis_sub/atomic_robot.glb"
+echo "atomic_3d_mesh_content_778899" > "$test_3d_file"
+
+sync_res=0
+sync_single_file_safe "$test_3d_file" "$G12_OUTPUT_DIR" "gdrive" "ComfyUI_3D_Output" 2 "$TEST_ROOT/sync_test.log" || sync_res=1
+assert_true "sync_single_file_safe executed successfully" $sync_res
+
+# Verify mock rclone log contains copyto with .partial suffix
+grep -q 'copyto.*atomic_robot.glb.*ComfyUI_3D_Output/trellis_sub/atomic_robot.glb.partial' "$MOCK_RCLONE_LOG"
+assert_true "rclone copyto used .partial staging suffix" $?
+
+# Verify mock rclone log contains moveto from .partial to final destination
+grep -q 'moveto.*atomic_robot.glb.partial.*ComfyUI_3D_Output/trellis_sub/atomic_robot.glb' "$MOCK_RCLONE_LOG"
+assert_true "rclone moveto performed atomic rename on remote" $?
+
+# Verify final destination file exists on remote mock store
+[ -f "$MOCK_REMOTE_STORE/ComfyUI_3D_Output/trellis_sub/atomic_robot.glb" ]
+assert_true "Final file exists in preserved subfolder on remote" $?
+
+# Verify partial file is cleaned up on remote
+[ ! -f "$MOCK_REMOTE_STORE/ComfyUI_3D_Output/trellis_sub/atomic_robot.glb.partial" ]
+assert_true "Staged .partial file moved cleanly" $?
+
+[ $SCENARIO_OK -eq 0 ] && G12_OK=0
+end_scenario
+
+# Scenario 12.5: Flock & Single Watcher PID Guard (No pkill -f Collateral Damage)
+start_scenario "12.5: Flock & Single Watcher PID Guard (No pkill Collateral Damage)"
+rm -f "$G12_COMFY_BASE/.gdrive_3d_watcher.pid" "$G12_COMFY_BASE/.gdrive_3d_watcher.lock"
+
+# 1. Start Watcher
+start_gdrive_3d_watcher "$G12_COMFY_BASE" "gdrive" "ComfyUI_3D_Output" >/dev/null 2>&1
+res_start=$?
+assert_true "start_gdrive_3d_watcher exited with 0" $res_start
+
+[ -f "$G12_COMFY_BASE/.gdrive_3d_watcher.pid" ]
+assert_true "Watcher PID file was created" $?
+watcher_pid=$(cat "$G12_COMFY_BASE/.gdrive_3d_watcher.pid" 2>/dev/null || echo "")
+[ -n "$watcher_pid" ] && kill -0 "$watcher_pid" 2>/dev/null
+assert_true "Watcher daemon process is running" $?
+
+# 2. Attempt duplicate watcher start (must not start second process)
+start_gdrive_3d_watcher "$G12_COMFY_BASE" "gdrive" "ComfyUI_3D_Output" >/dev/null 2>&1
+assert_true "Duplicate start prevented by PID/flock check" $?
+current_watcher_pid=$(cat "$G12_COMFY_BASE/.gdrive_3d_watcher.pid" 2>/dev/null || echo "")
+[ "$current_watcher_pid" = "$watcher_pid" ]
+assert_true "Watcher PID unchanged (single instance guaranteed)" $?
+
+# 3. Spawn innocent background process
+sleep 120 &
+innocent_pid=$!
+kill -0 "$innocent_pid" 2>/dev/null
+assert_true "Innocent background process spawned" $?
+
+# 4. Stop Watcher
+stop_gdrive_3d_watcher "$G12_COMFY_BASE" >/dev/null 2>&1
+assert_true "stop_gdrive_3d_watcher executed" $?
+
+# Verify watcher is stopped
+sleep 1
+! kill -0 "$watcher_pid" 2>/dev/null
+assert_true "Watcher daemon stopped via PID" $?
+
+# Verify innocent process is STILL ALIVE (proving no indiscriminate pkill)
+kill -0 "$innocent_pid" 2>/dev/null
+assert_true "Innocent process unaffected (zero pkill -f collateral damage)" $?
+kill "$innocent_pid" 2>/dev/null || true
+
+[ $SCENARIO_OK -eq 0 ] && G12_OK=0
+end_scenario
+
+# Scenario 12.6: Safe Failure Handling (Zero Local Output Loss)
+start_scenario "12.6: Safe Failure Handling (Zero Local Output Loss)"
+precious_local="$G12_OUTPUT_DIR/precious_original.glb"
+echo "PREVIOUS_CONTENT_DO_NOT_LOSE_12345" > "$precious_local"
+orig_sha=$(python3 -c "import hashlib; print(hashlib.sha256(open('$precious_local','rb').read()).hexdigest())")
+
+# Trigger mock rclone failure
+export MOCK_RCLONE_FAIL=1
+! sync_single_file_safe "$precious_local" "$G12_OUTPUT_DIR" "gdrive" "ComfyUI_3D_Output" 2 "$TEST_ROOT/sync_fail.log" >/dev/null 2>&1
+assert_true "sync_single_file_safe returned non-zero on rclone failure" $?
+unset MOCK_RCLONE_FAIL
+
+[ -f "$precious_local" ]
+assert_true "Local file retained on failure" $?
+after_sha=$(python3 -c "import hashlib; print(hashlib.sha256(open('$precious_local','rb').read()).hexdigest())")
+[ "$orig_sha" = "$after_sha" ]
+assert_true "Local file content 100% unaltered on failure (Zero Data Loss)" $?
+
+[ $SCENARIO_OK -eq 0 ] && G12_OK=0
+end_scenario
+
+# Scenario 12.7: Missing/Invalid Remote Fail-Closed Behavior
+start_scenario "12.7: Missing/Invalid Remote Fail-Closed Behavior"
+! start_gdrive_3d_watcher "$G12_COMFY_BASE" "invalid_nonexistent_remote" "ComfyUI_3D_Output" >/dev/null 2>&1
+assert_true "start_gdrive_3d_watcher failed closed on missing remote" $?
+
+[ $SCENARIO_OK -eq 0 ] && G12_OK=0
+end_scenario
+
+# Scenario 12.8: Config Permission 600 & Verified Stage 06 Execution (No || true)
+start_scenario "12.8: Config Permission 600 & Verified Stage 06 Execution"
+mock_conf="$TEST_ROOT/test_rclone_conf/rclone.conf"
+rm -rf "$(dirname "$mock_conf")" "$G12_COMFY_BASE/.gdrive_sync_marker.json"
+
+GDRIVE_TOKEN='{"access_token":"mock_tok"}' GDRIVE_CLIENT_ID='id' GDRIVE_CLIENT_SECRET='sec' \
+    RCLONE_CONFIG_PATH="$mock_conf" ENABLE_GDRIVE_3D=1 COMFY_BASE="$G12_COMFY_BASE" \
+    run_stage_06 </dev/null >/dev/null 2>&1
+res_stage06=$?
+assert_true "run_stage_06 executed successfully" $res_stage06
+
+[ -f "$mock_conf" ]; assert_true "rclone.conf exists" $?
+conf_perms=$(stat -c "%a" "$mock_conf" 2>/dev/null || echo "")
+[ "$conf_perms" = "600" ]; assert_true "rclone.conf has strict 600 permissions" $?
+
+stop_gdrive_3d_watcher "$G12_COMFY_BASE" >/dev/null 2>&1 || true
+
+# Test CLI stopping flag in install_nodes.sh
+bash "$REPO_ROOT/install_nodes.sh" --stop-gdrive-3d --comfy-dir "$G12_COMFY_BASE" >/dev/null 2>&1
+assert_true "install_nodes.sh --stop-gdrive-3d exits cleanly" $?
+
+# Test CLI stopping flag in install.sh
+bash "$REPO_ROOT/install.sh" --stop-gdrive-3d --comfy-dir "$G12_COMFY_BASE" >/dev/null 2>&1
+assert_true "install.sh --stop-gdrive-3d exits cleanly" $?
+
+# Test CLI stopping flag in install_models.sh
+bash "$REPO_ROOT/install_models.sh" --stop-gdrive-3d --comfy-dir "$G12_COMFY_BASE" >/dev/null 2>&1
+assert_true "install_models.sh --stop-gdrive-3d exits cleanly" $?
+
+unset RCLONE_CONFIG_PATH GDRIVE_TOKEN GDRIVE_CLIENT_ID GDRIVE_CLIENT_SECRET
+
+[ $SCENARIO_OK -eq 0 ] && G12_OK=0
+end_scenario
+
+# Scenario 12.9: Marker Creation Only After Successful Remote Check
+start_scenario "12.9: Marker Creation Only After Successful Remote Check"
+rm -f "$G12_COMFY_BASE/.gdrive_sync_marker.json"
+unset RCLONE_CONFIG_PATH GDRIVE_TOKEN GDRIVE_CLIENT_ID GDRIVE_CLIENT_SECRET
+
+# 1. Failed remote check must NOT create marker
+failed_remote_rc=0
+GDRIVE_REMOTE="invalid_nonexistent_remote" ENABLE_GDRIVE_3D=1 COMFY_BASE="$G12_COMFY_BASE" \
+    run_stage_06 </dev/null >/dev/null 2>&1 || failed_remote_rc=$?
+[ "$failed_remote_rc" -ne 0 ]
+assert_true "run_stage_06 returns non-zero when remote connectivity fails" $?
+[ ! -f "$G12_COMFY_BASE/.gdrive_sync_marker.json" ]
+assert_true "Marker NOT created when remote connectivity check fails" $?
+
+# 2. Successful remote check MUST create marker
+GDRIVE_REMOTE="gdrive" GDRIVE_FOLDER="ComfyUI_3D_Output" ENABLE_GDRIVE_3D=1 COMFY_BASE="$G12_COMFY_BASE" \
+    run_stage_06 </dev/null >/dev/null 2>&1
+res_succeed=$?
+assert_true "run_stage_06 passed with valid remote" $res_succeed
+
+marker_file="$G12_COMFY_BASE/.gdrive_sync_marker.json"
+[ -f "$marker_file" ]; assert_true "Marker created after remote check passes" $?
+marker_perms=$(stat -c "%a" "$marker_file" 2>/dev/null || echo "")
+[ "$marker_perms" = "600" ]; assert_true "Marker file has 600 permissions" $?
+
+marker_val=$(read_gdrive_marker "$G12_COMFY_BASE" 2>/dev/null || echo "")
+[ "$marker_val" = "gdrive|ComfyUI_3D_Output" ]; assert_true "Marker contains expected remote and folder" $?
+
+stop_gdrive_3d_watcher "$G12_COMFY_BASE" >/dev/null 2>&1 || true
+
+[ $SCENARIO_OK -eq 0 ] && G12_OK=0
+end_scenario
+
+# Scenario 12.10: Installer Auto-Start Entry Point from Marker
+start_scenario "12.10: Installer Auto-Start Entry Point from Marker"
+stop_gdrive_3d_watcher "$G12_COMFY_BASE" >/dev/null 2>&1 || true
+save_gdrive_marker "$G12_COMFY_BASE" "gdrive" "ComfyUI_3D_Output"
+
+# This is the production function now invoked by install.sh, install_nodes.sh,
+# and install_models.sh after their respective stages complete.
+ENABLE_GDRIVE=0 ENABLE_GDRIVE_3D=0 auto_start_gdrive_watcher_if_enabled "$G12_COMFY_BASE" >/dev/null 2>&1
+assert_true "auto_start_gdrive_watcher_if_enabled succeeded from marker" $?
+
+[ -f "$G12_COMFY_BASE/.gdrive_3d_watcher.pid" ]; assert_true "Watcher PID exists from marker auto-start" $?
+w_pid=$(cat "$G12_COMFY_BASE/.gdrive_3d_watcher.pid" 2>/dev/null || echo "")
+[ -n "$w_pid" ] && kill -0 "$w_pid" 2>/dev/null; assert_true "Watcher daemon running from marker auto-start" $?
+
+stop_gdrive_3d_watcher "$G12_COMFY_BASE" >/dev/null 2>&1 || true
+
+# Test without marker: must NOT start watcher
+remove_gdrive_marker "$G12_COMFY_BASE"
+ENABLE_GDRIVE=0 ENABLE_GDRIVE_3D=0 auto_start_gdrive_watcher_if_enabled "$G12_COMFY_BASE" >/dev/null 2>&1
+[ ! -f "$G12_COMFY_BASE/.gdrive_3d_watcher.pid" ]; assert_true "No watcher started when marker absent" $?
+
+[ $SCENARIO_OK -eq 0 ] && G12_OK=0
+end_scenario
+
+# Scenario 12.11: Polling Deduplication (No Re-upload on Unchanged File)
+start_scenario "12.11: Polling Deduplication (No Re-upload on Unchanged File)"
+state_f="$G12_COMFY_BASE/.gdrive_synced_state.json"
+rm -f "$state_f" "$MOCK_RCLONE_LOG"
+
+dedup_file="$G12_OUTPUT_DIR/dedup_mesh.glb"
+echo "dedup_mesh_data_payload_v1" > "$dedup_file"
+
+# 1. First sync -> Upload must occur
+sync_single_file_safe "$dedup_file" "$G12_OUTPUT_DIR" "gdrive" "ComfyUI_3D_Output" 2 "$TEST_ROOT/sync_d.log" "$state_f"
+assert_true "First sync executed" $?
+grep -q 'copyto.*dedup_mesh.glb' "$MOCK_RCLONE_LOG"
+assert_true "First sync invoked rclone copyto" $?
+[ -f "$state_f" ]; assert_true "State file updated after successful upload" $?
+
+# 2. Second sync on unchanged file -> Upload must NOT occur
+rm -f "$MOCK_RCLONE_LOG"
+sync_single_file_safe "$dedup_file" "$G12_OUTPUT_DIR" "gdrive" "ComfyUI_3D_Output" 2 "$TEST_ROOT/sync_d.log" "$state_f"
+assert_true "Second sync executed cleanly" $?
+if [ -f "$MOCK_RCLONE_LOG" ]; then
+    ! grep -q 'copyto.*dedup_mesh.glb' "$MOCK_RCLONE_LOG"
+    assert_true "Second sync skipped unchanged file (zero duplicate uploads)" $?
+else
+    assert_true "Zero rclone commands invoked on unchanged file" 0
+fi
+
+# 3. Third sync on modified file -> Upload MUST occur
+rm -f "$MOCK_RCLONE_LOG"
+sleep 1
+echo "appended_modification_v2" >> "$dedup_file"
+sync_single_file_safe "$dedup_file" "$G12_OUTPUT_DIR" "gdrive" "ComfyUI_3D_Output" 2 "$TEST_ROOT/sync_d.log" "$state_f"
+assert_true "Third sync executed on modified file" $?
+grep -q 'copyto.*dedup_mesh.glb' "$MOCK_RCLONE_LOG"
+assert_true "Modified file triggered new rclone copyto" $?
+
+[ $SCENARIO_OK -eq 0 ] && G12_OK=0
+end_scenario
+
+# Scenario 12.12: Canary Secret Zero-Persistence in Logs, Marker & State
+start_scenario "12.12: Canary Secret Zero-Persistence in Logs, Marker & State"
+canary_token_secret="GDRIVE_CANARY_SECRET_SUPER_UNIQUE_987654321"
+canary_conf="$TEST_ROOT/canary_conf/rclone.conf"
+rm -rf "$(dirname "$canary_conf")"
+
+canary_stage_rc=0
+GDRIVE_TOKEN="$canary_token_secret" GDRIVE_CLIENT_ID="canary_id" GDRIVE_CLIENT_SECRET="canary_sec" \
+    RCLONE_CONFIG_PATH="$canary_conf" ENABLE_GDRIVE_3D=1 COMFY_BASE="$G12_COMFY_BASE" \
+    run_stage_06 </dev/null >/dev/null 2>&1 || canary_stage_rc=$?
+[ "$canary_stage_rc" -eq 0 ]; assert_true "Canary stage executes successfully before persistence scan" $?
+
+# Search all generated marker, state, watcher logs for canary token string
+canary_matches=$(grep -rn "$canary_token_secret" "$G12_COMFY_BASE" 2>/dev/null | grep -v "rclone.conf" | wc -l)
+[ "$canary_matches" -eq 0 ]; assert_true "Canary token zero matches across all state/marker/log files ($canary_matches found)" $?
+
+stop_gdrive_3d_watcher "$G12_COMFY_BASE" >/dev/null 2>&1 || true
+export PATH="$OLD_PATH"
+
+[ $SCENARIO_OK -eq 0 ] && G12_OK=0
+end_scenario
+
+[ $G12_OK -eq 1 ] && TEST_GROUPS_PASSED=$((TEST_GROUPS_PASSED + 1))
 
 
 echo -e "\n=================================================================="

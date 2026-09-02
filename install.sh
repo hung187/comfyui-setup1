@@ -76,8 +76,12 @@ show_help() {
     echo "  --validate / --preflight Chế độ kiểm tra toàn diện cấu hình & môi trường (READ-ONLY, không tải/cài)"
     echo "  --comfy-dir <PATH>       Chỉ định trực tiếp thư mục cài đặt ComfyUI"
     echo "  --civitai-token <TOK>    Nhập API Token của Civitai"
-    echo "  --gdrive                 Tự động lưu ảnh từ ComfyUI vào Google Drive"
-    echo "  --gdrive-folder <DIR>    Tên thư mục trên Google Drive (mặc định: ComfyUI_Output)"
+    echo "  --gdrive-3d              Tự động lưu 3D output vào Google Drive (thư mục ComfyUI_3D_Output)"
+    echo "  --gdrive                 Tự động lưu output từ ComfyUI vào Google Drive"
+    echo "  --gdrive-folder <DIR>    Tên thư mục trên Google Drive (mặc định: ComfyUI_3D_Output)"
+    echo "  --gdrive-remote <NAME>   Tên remote rclone (mặc định: gdrive)"
+    echo "  --stop-gdrive-3d         Dừng 3D output sync watcher đang chạy"
+    echo "  --status-gdrive-3d       Kiểm tra trạng thái 3D output sync watcher"
     echo "  --only-nodes             Chỉ cài đặt ComfyUI + Custom Nodes (bỏ qua tải Models)"
     echo "  --only-models            Chỉ tải Models (bỏ qua cài đặt Custom Nodes)"
     echo "  --reload                 Nạp nhanh Custom Nodes mới mà không đụng đến GPU"
@@ -91,6 +95,8 @@ show_help() {
 
 DO_RELOAD=0
 DO_VALIDATE=0
+DO_STOP_GDRIVE=0
+DO_STATUS_GDRIVE=0
 ONLY_NODES=0
 ONLY_MODELS=0
 
@@ -116,8 +122,19 @@ while [[ $# -gt 0 ]]; do
             export CIVITAI_TOKEN="$2"
             shift 2
             ;;
+        --gdrive-3d)
+            export ENABLE_GDRIVE=1
+            export ENABLE_GDRIVE_3D=1
+            if [ -z "${GDRIVE_FOLDER:-}" ]; then
+                export GDRIVE_FOLDER="ComfyUI_3D_Output"
+            fi
+            shift
+            ;;
         --gdrive)
             export ENABLE_GDRIVE=1
+            if [ -z "${GDRIVE_FOLDER:-}" ]; then
+                export GDRIVE_FOLDER="ComfyUI_Output"
+            fi
             shift
             ;;
         --gdrive-folder)
@@ -127,6 +144,22 @@ while [[ $# -gt 0 ]]; do
             fi
             export GDRIVE_FOLDER="$2"
             shift 2
+            ;;
+        --gdrive-remote)
+            if [ -z "${2:-}" ]; then
+                echo -e "${RED}❌ Lỗi: --gdrive-remote yêu cầu tên remote.${NC}" >&2
+                exit 1
+            fi
+            export GDRIVE_REMOTE="$2"
+            shift 2
+            ;;
+        --stop-gdrive-3d|--stop-gdrive)
+            DO_STOP_GDRIVE=1
+            shift
+            ;;
+        --status-gdrive-3d|--status-gdrive)
+            DO_STATUS_GDRIVE=1
+            shift
             ;;
         --only-nodes|--nodes-only)
             ONLY_NODES=1
@@ -167,6 +200,18 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [ "$DO_STOP_GDRIVE" -eq 1 ]; then
+    source "$SCRIPT_DIR/scripts/06_gdrive_sync.sh"
+    stop_gdrive_3d_watcher "${COMFY_BASE:-}"
+    exit $?
+fi
+
+if [ "$DO_STATUS_GDRIVE" -eq 1 ]; then
+    source "$SCRIPT_DIR/scripts/06_gdrive_sync.sh"
+    status_gdrive_3d_watcher "${COMFY_BASE:-}"
+    exit $?
+fi
 
 if [ "$DO_VALIDATE" -eq 1 ]; then
     run_preflight "full" 1
@@ -211,7 +256,9 @@ main() {
     fi
 
     run_stage_05 "$@" || return 1
-    run_stage_06 "$@" || return 1
+    # Starts only when explicitly requested or when a previously verified,
+    # non-secret Drive marker exists.
+    auto_start_gdrive_watcher_if_enabled "${COMFY_BASE:-}" || return 1
 }
 
 main "$@"
