@@ -80,5 +80,12 @@ install.sh (Entry point)
 - **ZIP Package**: `/app/ComfyUI/output/nexus_sentinel/nexus_sentinel_celestial_source_200_selected_100.zip` (125,049,731 bytes / 119.26 MB).
 - **SHA-256**: `e28cb9af9cc9ee160871afa3271998fcd4267cce9bb8be0a262b0f2d656cf6ef`.
 
-
-
+## 8. Real Cloud GPU Deployment & Acceptance (RTX 3090 24GB)
+- **Host / IP**: `159.48.242.3:21406`
+- **Hardware**: NVIDIA GeForce RTX 3090 (24,576 MiB VRAM), 200 GB Storage Overlay.
+- **Base Environment**: Fresh minimal container with Python 3.10.12.
+- **Runtime Setup**: Automated installation of PyTorch 2.6.0+cu124, `build-essential`, `python3-dev`, `ffmpeg`, `libgl1`, `aria2`, `jq`.
+- **Custom Nodes**: 12/12 Custom Nodes (ComfyUI-Manager, TRELLIS2 3D, ControlNet Aux, IP-Adapter Plus, WAS Node Suite, KJNodes, rgthree, Inpaint, Easy Use, LayerStyle, Custom Scripts, Ultimate SD Upscale) imported cleanly in under 2 seconds with 0 failed nodes.
+- **Models Downloaded**: 40 / 40 models (Illustrious XL & SDXL Checkpoints, TRELLIS2 3D models, ControlNet, IP-Adapter, VAEs, Upscalers, LoRAs) processed with 0 failures (100% success rate).
+- **Active Service**: ComfyUI listening on `http://0.0.0.0:8188` (`--highvram`).
+- **Render Acceptance**: Sample generation (`IL/oneObsession_v23.safetensors`, 512x512, seed 42) executed via API and verified file `ComfyUI_Acceptance_Test_00001_.png` generated in < 10 seconds.
